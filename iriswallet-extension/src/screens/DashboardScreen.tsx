@@ -90,10 +90,10 @@ export default function DashboardScreen() {
 
       <div className="btn-group">
         <button className="btn-primary" onClick={() => setScreen('send')}>
-          Send (public)
+          Send ETH
         </button>
         <button className="btn-private" onClick={() => setScreen('send-private')}>
-          Send (private)
+          Private Send
         </button>
       </div>
 
