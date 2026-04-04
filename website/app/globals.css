@@ -1096,14 +1096,16 @@ a {
 
 /* ── Built With Marquee ──────────────────────── */
 
+.built-with-section {
+  padding: 2.5rem 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
 .built-with {
-  width: min(1200px, 90vw);
-  margin: 3.5rem auto 0;
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  padding-top: 2.5rem;
-  border-top: 1px solid var(--border);
 }
 
 .built-with-label {
@@ -1126,9 +1128,16 @@ a {
 .marquee-inner {
   display: flex;
   align-items: center;
-  gap: 3rem;
   width: max-content;
-  animation: marquee 18s linear infinite;
+  animation: marquee 24s linear infinite;
+}
+
+.marquee-group {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding-right: 1.25rem;
+  flex-shrink: 0;
 }
 
 .partner-logo {
@@ -1165,7 +1174,7 @@ a {
     transform: translateX(0);
   }
   100% {
-    transform: translateX(-50%);
+    transform: translateX(calc(-50%));
   }
 }
 

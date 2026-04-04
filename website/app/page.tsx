@@ -193,36 +193,32 @@ export default function Home() {
             </div>
           </div>
         </div>
+      </section>
 
-        {/* ── Built With Marquee ────────────── */}
-        <div className="built-with reveal reveal-delay-4">
-          <span className="built-with-label">Built with</span>
-          <div className="marquee-track">
-            <div className="marquee-inner">
-              <a className="partner-logo" href="https://www.ledger.com" target="_blank" rel="noopener noreferrer">
-                <Image src="/logo-ledger.png" alt="Ledger" width={40} height={40} />
-                <span>Ledger</span>
-              </a>
-              <a className="partner-logo" href="https://chain.link" target="_blank" rel="noopener noreferrer">
-                <Image src="/logo-chainlink.png" alt="Chainlink" width={40} height={40} />
-                <span>Chainlink</span>
-              </a>
-              <a className="partner-logo" href="https://unlink.io" target="_blank" rel="noopener noreferrer">
-                <Image src="/logo-unlink.jpeg" alt="Unlink Labs" width={40} height={40} />
-                <span>Unlink Labs</span>
-              </a>
-              <a className="partner-logo" href="https://www.ledger.com" target="_blank" rel="noopener noreferrer" aria-hidden="true">
-                <Image src="/logo-ledger.png" alt="Ledger" width={40} height={40} />
-                <span>Ledger</span>
-              </a>
-              <a className="partner-logo" href="https://chain.link" target="_blank" rel="noopener noreferrer" aria-hidden="true">
-                <Image src="/logo-chainlink.png" alt="Chainlink" width={40} height={40} />
-                <span>Chainlink</span>
-              </a>
-              <a className="partner-logo" href="https://unlink.io" target="_blank" rel="noopener noreferrer" aria-hidden="true">
-                <Image src="/logo-unlink.jpeg" alt="Unlink Labs" width={40} height={40} />
-                <span>Unlink Labs</span>
-              </a>
+      {/* ── Built With ────────────────────── */}
+      <section className="built-with-section">
+        <div className="section-inner">
+          <div className="built-with reveal">
+            <span className="built-with-label">Built with</span>
+            <div className="marquee-track">
+              <div className="marquee-inner">
+                {[...Array(6)].map((_, i) => (
+                  <div className="marquee-group" key={i} aria-hidden={i > 0 ? "true" : undefined}>
+                    <a className="partner-logo" href="https://www.ledger.com" target="_blank" rel="noopener noreferrer">
+                      <Image src="/logo-ledger.png" alt="Ledger" width={40} height={40} />
+                      <span>Ledger</span>
+                    </a>
+                    <a className="partner-logo" href="https://chain.link" target="_blank" rel="noopener noreferrer">
+                      <Image src="/logo-chainlink.png" alt="Chainlink" width={40} height={40} />
+                      <span>Chainlink</span>
+                    </a>
+                    <a className="partner-logo" href="https://unlink.io" target="_blank" rel="noopener noreferrer">
+                      <Image src="/logo-unlink.jpeg" alt="Unlink Labs" width={40} height={40} />
+                      <span>Unlink Labs</span>
+                    </a>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
