@@ -328,6 +328,16 @@ body {
   color: #00d4ff;
 }
 
+.scan-status.warning {
+  color: #ffaa00;
+  font-size: 12px;
+}
+
+.camera-reticle.reticle-warning {
+  border-color: rgba(255, 170, 0, 0.7);
+  box-shadow: 0 0 20px rgba(255, 170, 0, 0.2);
+}
+
 .scan-status-dot {
   width: 8px;
   height: 8px;
