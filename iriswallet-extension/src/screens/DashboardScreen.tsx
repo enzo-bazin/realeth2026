@@ -25,7 +25,6 @@ export default function DashboardScreen() {
     }
   };
 
-  // Auto-refresh balance on mount and every 10s
   useEffect(() => {
     refreshBalance();
     const interval = setInterval(refreshBalance, 10000);
@@ -41,14 +40,14 @@ export default function DashboardScreen() {
       <div className="logo-section">
         <h1 className="title">{wallet.walletName}</h1>
         <p className="subtitle">
-          {wallet.onChain ? 'Wallet on-chain' : 'Wallet off-chain'}
+          {wallet.onChain ? 'On-chain wallet' : 'Off-chain wallet'}
           {wallet.onChain && <span className="chain-badge">Sepolia</span>}
         </p>
       </div>
 
       <div className="dashboard-card">
         <div className="balance-section">
-          <span className="balance-label">Solde</span>
+          <span className="balance-label">Balance</span>
           <span className="balance-value">
             {parseFloat(String(wallet.balance)).toFixed(4)} ETH
             {refreshing && <span className="spinner-small" />}
@@ -56,7 +55,7 @@ export default function DashboardScreen() {
         </div>
 
         <div className="info-row">
-          <span className="info-label">Adresse</span>
+          <span className="info-label">Address</span>
           <a
             className="info-value mono"
             href={explorerUrl}
@@ -68,9 +67,9 @@ export default function DashboardScreen() {
         </div>
 
         <div className="info-row">
-          <span className="info-label">Cree le</span>
+          <span className="info-label">Created</span>
           <span className="info-value">
-            {new Date(wallet.createdAt).toLocaleDateString('fr-FR')}
+            {new Date(wallet.createdAt).toLocaleDateString('en-US')}
           </span>
         </div>
 
@@ -90,11 +89,11 @@ export default function DashboardScreen() {
       </div>
 
       <button className="btn-primary" onClick={() => setScreen('send')}>
-        Envoyer ETH
+        Send ETH
       </button>
 
       <button className="btn-danger" onClick={logout}>
-        Deconnexion
+        Disconnect
       </button>
     </div>
   );

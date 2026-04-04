@@ -13,7 +13,7 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!walletName.trim()) {
-      setError('Veuillez entrer un nom de wallet');
+      setError('Please enter a wallet name');
       return;
     }
 
@@ -21,19 +21,15 @@ export default function RegisterScreen() {
     setError('');
 
     try {
-      // 1. Generate wallet (stored locally by address)
       const { address } = createWallet();
 
-      // 2. Register in backend with our address
-      setStatus('Enregistrement iris...');
+      setStatus('Registering iris...');
       const backendResult = await register(walletName.trim(), address);
       const irisHash = backendResult.wallet?.irisHash || '';
 
-      // 3. Register on-chain
-      setStatus('Enregistrement on-chain...');
+      setStatus('Registering on-chain...');
       const txHash = await registerOnChain(address, irisHash);
 
-      // 4. Get balance
       const bal = await getBalance(address);
 
       setWallet({
@@ -46,7 +42,7 @@ export default function RegisterScreen() {
       });
       setScreen('dashboard');
     } catch (e: any) {
-      setError(e.message || 'Erreur lors de la creation du wallet');
+      setError(e.message || 'Error creating wallet');
     } finally {
       setLoading(false);
       setStatus('');
@@ -56,17 +52,17 @@ export default function RegisterScreen() {
   return (
     <div className="screen">
       <div className="logo-section">
-        <h1 className="title">Nouveau Wallet</h1>
-        <p className="subtitle">Iris detecte — creation du wallet on-chain</p>
+        <h1 className="title">New Wallet</h1>
+        <p className="subtitle">Iris detected — creating on-chain wallet</p>
       </div>
 
       <div className="form-group">
-        <label className="form-label" htmlFor="wallet-name">Nom du wallet</label>
+        <label className="form-label" htmlFor="wallet-name">Wallet name</label>
         <input
           id="wallet-name"
           className="form-input"
           type="text"
-          placeholder="Ex: MonWallet"
+          placeholder="e.g. MyWallet"
           value={walletName}
           onChange={(e) => setWalletName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
@@ -80,14 +76,14 @@ export default function RegisterScreen() {
             <span className="loading-text">{status}</span>
           </>
         ) : (
-          'Creer mon wallet on-chain'
+          'Create my on-chain wallet'
         )}
       </button>
 
       {error && <p className="error-msg">{error}</p>}
 
       <button className="btn-link" onClick={() => setScreen('scan')}>
-        ← Retour au scan
+        ← Back to scan
       </button>
     </div>
   );

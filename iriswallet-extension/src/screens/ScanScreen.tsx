@@ -7,7 +7,7 @@ const API_URL = 'http://localhost:5000';
 
 export default function ScanScreen() {
   const { setScreen, setWallet } = useWallet();
-  const [status, setStatus] = useState('Recherche de votre oeil...');
+  const [status, setStatus] = useState('Looking for your eye...');
   const [error, setError] = useState('');
   const [unknown, setUnknown] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -15,7 +15,7 @@ export default function ScanScreen() {
   const startAutoScan = () => {
     setError('');
     setUnknown(false);
-    setStatus('Recherche de votre oeil...');
+    setStatus('Looking for your eye...');
 
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -30,7 +30,7 @@ export default function ScanScreen() {
         const data = JSON.parse(event.data);
 
         if (data.status === 'scanning') {
-          setStatus('Recherche de votre iris...');
+          setStatus('Scanning your iris...');
           return;
         }
 
@@ -38,12 +38,10 @@ export default function ScanScreen() {
         eventSourceRef.current = null;
 
         if (data.status === 'found') {
-          // Backend matched iris — the wallet address is the one we gave at register
           const address = data.wallet?.address || data.wallet?.walletAddress;
           const name = data.wallet?.walletName || 'IrisWallet';
           const created = data.wallet?.createdAt || new Date().toISOString();
 
-          // Fetch real balance from chain
           let balance = '0';
           try {
             const bal = await getBalance(address as Address);
@@ -60,13 +58,13 @@ export default function ScanScreen() {
           setScreen('dashboard');
         } else if (data.status === 'unknown') {
           setUnknown(true);
-          setStatus('Iris non reconnu');
+          setStatus('Iris not recognized');
         }
       } catch { /* ignore */ }
     };
 
     es.onerror = () => {
-      setError('Connexion au serveur perdue');
+      setError('Connection to server lost');
       es.close();
       eventSourceRef.current = null;
     };
@@ -84,7 +82,7 @@ export default function ScanScreen() {
     <div className="screen">
       <div className="logo-section compact">
         <h1 className="title">IrisWallet</h1>
-        <p className="subtitle">Authentification biometrique on-chain</p>
+        <p className="subtitle">On-chain biometric authentication</p>
       </div>
 
       <div className="camera-container">
@@ -98,9 +96,9 @@ export default function ScanScreen() {
         <p className="error-msg">{error}</p>
       ) : unknown ? (
         <>
-          <p className="scan-status warning">Iris non reconnu — aucun compte associe</p>
-          <button className="btn-primary" onClick={() => setScreen('register')}>Creer un compte</button>
-          <button className="btn-link" onClick={() => { setUnknown(false); startAutoScan(); }}>Reessayer le scan</button>
+          <p className="scan-status warning">Iris not recognized — no account found</p>
+          <button className="btn-primary" onClick={() => setScreen('register')}>Create an account</button>
+          <button className="btn-link" onClick={() => { setUnknown(false); startAutoScan(); }}>Retry scan</button>
         </>
       ) : (
         <>
@@ -108,7 +106,7 @@ export default function ScanScreen() {
             <span className="scan-status-dot" />
             <span>{status}</span>
           </div>
-          <p className="scan-hint">Placez votre oeil devant la camera, le scan est automatique</p>
+          <p className="scan-hint">Place your eye in front of the camera, scan is automatic</p>
         </>
       )}
     </div>

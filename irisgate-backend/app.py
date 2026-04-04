@@ -114,7 +114,7 @@ def _capture_frame():
                     cap.read()
                 ret, frame = cap.read()
                 if not ret:
-                    raise RuntimeError("Echec capture frame depuis le Pi")
+                    raise RuntimeError("Failed to capture frame from Pi")
 
         tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
         cv2.imwrite(tmp.name, frame)
@@ -307,7 +307,7 @@ def api_scan():
     except RuntimeError as e:
         msg = str(e)
         if "EyeOrientationEstimationError" in msg or "VectorizationError" in msg or "Geometry" in msg:
-            return jsonify({"error": "Iris non detecte. Rapprochez votre oeil et gardez-le bien ouvert."}), 422
+            return jsonify({"error": "Iris not detected. Move your eye closer and keep it open."}), 422
         return jsonify({"error": f"Erreur scan: {msg}"}), 422
     except Exception as e:
         return jsonify({"error": f"Erreur: {e}"}), 500
@@ -327,11 +327,11 @@ def api_register():
     """
     data = request.get_json()
     if not data:
-        return jsonify({"error": "Body JSON requis"}), 400
+        return jsonify({"error": "JSON body required"}), 400
 
     wallet_name = data.get("walletName", "").strip()
     if not wallet_name:
-        return jsonify({"error": "walletName requis"}), 400
+        return jsonify({"error": "walletName required"}), 400
 
     try:
         # Utiliser le template en cache du dernier autoscan
@@ -339,7 +339,7 @@ def api_register():
         iris_hash = _last_iris_hash
 
         if template is None:
-            return jsonify({"error": "Aucun scan recent. Veuillez scanner votre iris d'abord."}), 400
+            return jsonify({"error": "No recent scan. Please scan your iris first."}), 400
 
         # Verifier que cet iris n'existe pas deja
         match, dist = _find_match(template)
@@ -480,7 +480,7 @@ def _autoscan_thread():
 
         # Oeil detecte de facon stable — lancer la pipeline
         consecutive_detections = 0
-        print("[AUTOSCAN] Oeil detecte, lancement pipeline...")
+        print("[AUTOSCAN] Eye detected, launching pipeline...")
 
         _scanning = True
         time.sleep(0.1)
@@ -515,14 +515,14 @@ def _autoscan_thread():
                         "status": "unknown",
                         "irisHash": iris_hash,
                     }
-                    print(f"[AUTOSCAN] Iris inconnu — hash={iris_hash}")
+                    print(f"[AUTOSCAN] Unknown iris — hash={iris_hash}")
 
                 _autoscan_event.set()
 
             except Exception as e:
                 msg = str(e)
                 if "EyeOrientationEstimationError" in msg or "VectorizationError" in msg or "Geometry" in msg:
-                    print("[AUTOSCAN] Iris mal cadre, on reessaie...")
+                    print("[AUTOSCAN] Iris poorly framed, retrying...")
                 else:
                     print(f"[AUTOSCAN] Erreur pipeline: {msg}")
                 # On ne signale pas l'erreur, on reessaie
@@ -594,7 +594,7 @@ def api_autoscan_stop():
 @app.route("/enroll", methods=["POST"])
 def enroll():
     if "image" not in request.files:
-        return jsonify({"error": "Champ 'image' requis"}), 400
+        return jsonify({"error": "'image' field required"}), 400
 
     file = request.files["image"]
     eye_side = request.form.get("eye_side", "left")
@@ -634,7 +634,7 @@ def enroll():
 @app.route("/identify", methods=["POST"])
 def identify():
     if "image" not in request.files:
-        return jsonify({"error": "Champ 'image' requis"}), 400
+        return jsonify({"error": "'image' field required"}), 400
 
     file = request.files["image"]
     eye_side = request.form.get("eye_side", "left")
@@ -689,8 +689,8 @@ def list_accounts():
 @app.route("/accounts/<address>", methods=["DELETE"])
 def remove_account(address):
     if delete_account(address):
-        return jsonify({"message": "Compte supprime", "address": address}), 200
-    return jsonify({"error": "Compte non trouve"}), 404
+        return jsonify({"message": "Account deleted", "address": address}), 200
+    return jsonify({"error": "Account not found"}), 404
 
 
 @app.route("/health", methods=["GET"])
@@ -716,24 +716,24 @@ if __name__ == "__main__":
     print("  IrisGate Backend")
     print("=" * 60)
     print()
-    print("  Chargement du modele iris...")
+    print("  Loading iris model...")
     get_pipeline()
-    print("  Modele charge !")
+    print("  Model loaded!")
     print()
     init_db()
 
     # Lancer le stream Pi + thread de lecture
-    print("  Connexion au Pi...")
+    print("  Connecting to Pi...")
     try:
         _ensure_pi_stream()
         t = threading.Thread(target=_stream_reader_thread, daemon=True)
         t.start()
         t2 = threading.Thread(target=_autoscan_thread, daemon=True)
         t2.start()
-        print("  Stream Pi connecte !")
+        print("  Pi stream connected!")
     except Exception as e:
-        print(f"  [WARN] Pi non disponible: {e}")
-        print("  Le stream sera lance au premier scan.")
+        print(f"  [WARN] Pi not available: {e}")
+        print("  Stream will start on first scan.")
     print(f"  DB: {DB_PATH}")
     print(f"  Pi: {PI_USER}@{PI_IP}:{PI_STREAM_PORT}")
     print(f"  Seuil match: {MATCH_THRESHOLD}")
