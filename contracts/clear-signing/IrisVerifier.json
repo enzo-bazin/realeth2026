@@ -1,0 +1,55 @@
+{
+  "$schema": "https://eip712.json-schema.org/v0/eip712-clear-signing.json",
+  "contract": {
+    "name": "IrisVerifier",
+    "address": {
+      "4801": "0xe2D8794bf15FB33dC09Ad2B231A3a9b04A32ccBf"
+    }
+  },
+  "functions": [
+    {
+      "selector": "submitMatchResult(address,bool,uint256,uint256)",
+      "label": "Submit Iris Match Result",
+      "description": "Submit the result of an iris biometric match from the Chainlink oracle. Only the authorized oracle can call this.",
+      "parameters": [
+        {
+          "name": "wallet",
+          "label": "Wallet Address",
+          "description": "The wallet whose iris was scanned"
+        },
+        {
+          "name": "matched",
+          "label": "Match Result",
+          "description": "Whether the iris scan matched (true/false)"
+        },
+        {
+          "name": "confidence",
+          "label": "Confidence Score",
+          "description": "Confidence score of the iris match (0-100)"
+        },
+        {
+          "name": "nonce",
+          "label": "Nonce",
+          "description": "Unique nonce to prevent replay attacks"
+        }
+      ]
+    },
+    {
+      "selector": "approveTransaction(address,bytes32)",
+      "label": "Approve Transaction with Iris",
+      "description": "Approve a blockchain transaction using your iris scan. Requires a valid iris match.",
+      "parameters": [
+        {
+          "name": "wallet",
+          "label": "Wallet Address",
+          "description": "The wallet approving the transaction"
+        },
+        {
+          "name": "txHash",
+          "label": "Transaction Hash",
+          "description": "The hash of the transaction to approve"
+        }
+      ]
+    }
+  ]
+}

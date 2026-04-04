@@ -1,0 +1,38 @@
+{
+  "$schema": "https://eip712.json-schema.org/v0/eip712-clear-signing.json",
+  "contract": {
+    "name": "WorldIDVerifier",
+    "address": {
+      "4801": "0xB271E36459D64Ed2eB6a8bAbbEbD6e271c5d4332"
+    }
+  },
+  "functions": [
+    {
+      "selector": "verifyAndRegister(address,uint256,uint256,uint256[8])",
+      "label": "Register Iris Wallet",
+      "description": "Verify your World ID proof and register your wallet. This links your unique identity to your wallet address. One iris = one wallet.",
+      "parameters": [
+        {
+          "name": "wallet",
+          "label": "Wallet Address",
+          "description": "The wallet address to register"
+        },
+        {
+          "name": "root",
+          "label": "Merkle Root",
+          "description": "World ID Merkle tree root"
+        },
+        {
+          "name": "nullifierHash",
+          "label": "Nullifier Hash",
+          "description": "Your unique World ID nullifier (prevents double registration)"
+        },
+        {
+          "name": "proof",
+          "label": "ZK Proof",
+          "description": "Zero-knowledge proof of your World ID"
+        }
+      ]
+    }
+  ]
+}

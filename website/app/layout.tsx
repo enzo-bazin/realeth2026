@@ -1,21 +1,10 @@
 import type { Metadata } from "next";
-import { Sora, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const sora = Sora({
-  variable: "--font-sora",
-  subsets: ["latin"],
-});
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "RealETH 2026 | Wallet Biometrique",
+  title: "IrisWallet | Biometric Wallet Access",
   description:
-    "Site vitrine de RealETH 2026: securite wallet, reconnaissance iris et anti-spoofing.",
+    "IrisWallet is a biometric wallet platform focused on iris recognition, anti-spoofing, and secure digital access.",
 };
 
 export default function RootLayout({
@@ -24,7 +13,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`${sora.variable} ${spaceGrotesk.variable}`}>
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

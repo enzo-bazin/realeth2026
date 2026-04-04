@@ -1,0 +1,62 @@
+{
+  "$schema": "https://eip712.json-schema.org/v0/eip712-clear-signing.json",
+  "contract": {
+    "name": "IrisRegistry",
+    "address": {
+      "4801": "0x89ab6cb2f09Fac7Fa1A0EC07725301FB7a085f6c"
+    }
+  },
+  "functions": [
+    {
+      "selector": "registerWallet(address,uint256,uint256,uint256[8])",
+      "label": "Register Iris Wallet",
+      "description": "Register a new wallet linked to your iris scan and World ID. This creates your unique iris-authenticated wallet.",
+      "parameters": [
+        {
+          "name": "wallet",
+          "label": "Wallet Address",
+          "description": "The wallet address to register"
+        },
+        {
+          "name": "root",
+          "label": "Merkle Root",
+          "description": "World ID Merkle tree root"
+        },
+        {
+          "name": "nullifierHash",
+          "label": "Nullifier Hash",
+          "description": "Your unique identity nullifier"
+        },
+        {
+          "name": "proof",
+          "label": "ZK Proof",
+          "description": "Zero-knowledge proof of your World ID"
+        }
+      ]
+    },
+    {
+      "selector": "deactivateWallet(uint256)",
+      "label": "Deactivate Wallet",
+      "description": "Deactivate your iris wallet. You can reactivate it later.",
+      "parameters": [
+        {
+          "name": "nullifierHash",
+          "label": "Nullifier Hash",
+          "description": "The nullifier of the wallet to deactivate"
+        }
+      ]
+    },
+    {
+      "selector": "reactivateWallet(uint256)",
+      "label": "Reactivate Wallet",
+      "description": "Reactivate a previously deactivated iris wallet.",
+      "parameters": [
+        {
+          "name": "nullifierHash",
+          "label": "Nullifier Hash",
+          "description": "The nullifier of the wallet to reactivate"
+        }
+      ]
+    }
+  ]
+}
