@@ -1,0 +1,8 @@
+# IrisWallet — Chainlink CRE Project
+# Iris biometric matching workflow using Confidential HTTP
+
+rpc-endpoints:
+  sepolia: "${SEPOLIA_RPC_URL}"
+
+workflows:
+  - iris-match-workflow

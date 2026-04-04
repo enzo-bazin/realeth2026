@@ -1,11 +1,11 @@
 import { useState, useRef } from 'react';
 import { useWallet } from '../context/WalletContext';
-import { sendTransaction, getBalance } from '../services/blockchain';
-import { formatEther, type Address } from 'viem';
+import { sendTransaction, getBalance, waitForCREMatch, approveTransactionOnChain } from '../services/blockchain';
+import { formatEther, type Address, keccak256, toHex } from 'viem';
 
 const API_URL = 'http://localhost:5000';
 
-type Step = 'form' | 'signing' | 'success';
+type Step = 'form' | 'scanning' | 'verifying' | 'sending' | 'success';
 
 export default function SendScreen() {
   const { wallet, setWallet, setScreen } = useWallet();
@@ -24,7 +24,7 @@ export default function SendScreen() {
     if (!parseFloat(amount) || parseFloat(amount) <= 0) { setError('Montant invalide'); return; }
 
     setError('');
-    setStep('signing');
+    setStep('scanning');
     setStatus('Placez votre oeil devant la camera...');
 
     const es = new EventSource(`${API_URL}/api/autoscan`);
@@ -44,24 +44,42 @@ export default function SendScreen() {
           return;
         }
 
-        // Backend verified iris via Hamming distance — send tx
-        setStatus('Iris verifie — envoi en cours...');
+        // Iris detected — now wait for Chainlink CRE on-chain verification
+        setStep('verifying');
+        setStatus('Verification Chainlink CRE en cours...');
+
         try {
+          await waitForCREMatch(wallet.walletAddress as Address, 120_000, 3_000);
+
+          setStep('sending');
+          setStatus('Iris verifie on-chain — envoi en cours...');
+
           const hash = await sendTransaction(
             wallet.walletAddress as Address,
             to.trim() as Address,
             amount,
           );
+
+          // Approve the transaction on IrisVerifier
+          const txHashBytes = keccak256(toHex(hash));
+          await approveTransactionOnChain(wallet.walletAddress as Address, txHashBytes);
+
           setTxHash(hash);
           setStep('success');
 
           const bal = await getBalance(wallet.walletAddress as Address);
           setWallet({ ...wallet, balance: formatEther(bal) });
         } catch (e: any) {
-          setError(e.message?.includes('insufficient') ? 'Solde insuffisant' : (e.message || 'Erreur envoi'));
+          if (e.message?.includes('Timeout')) {
+            setError('Verification CRE timeout — reessayez');
+          } else if (e.message?.includes('insufficient')) {
+            setError('Solde insuffisant');
+          } else {
+            setError(e.message || 'Erreur envoi');
+          }
           setStep('form');
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore parse errors */ }
     };
 
     es.onerror = () => {
@@ -78,11 +96,20 @@ export default function SendScreen() {
     setStep('form');
   };
 
+  const stepLabel = (): string => {
+    switch (step) {
+      case 'scanning': return 'Scan iris pour autoriser';
+      case 'verifying': return 'Verification Chainlink CRE...';
+      case 'sending': return 'Envoi de la transaction...';
+      default: return 'Un scan iris est requis pour signer';
+    }
+  };
+
   return (
     <div className="screen">
       <div className="logo-section">
         <h1 className="title">Envoyer ETH</h1>
-        <p className="subtitle">{step === 'signing' ? 'Scan iris pour autoriser' : 'Un scan iris est requis pour signer'}</p>
+        <p className="subtitle">{stepLabel()}</p>
       </div>
 
       {step === 'success' ? (
@@ -98,6 +125,10 @@ export default function SendScreen() {
             <span className="info-label">Montant</span>
             <span className="info-value">{amount} ETH</span>
           </div>
+          <div className="info-row">
+            <span className="info-label">Securise par</span>
+            <span className="info-value">Chainlink CRE (TEE)</span>
+          </div>
           <button className="btn-primary" onClick={() => setScreen('dashboard')}>Retour au dashboard</button>
         </div>
       ) : (
@@ -105,7 +136,7 @@ export default function SendScreen() {
           <div className="camera-container">
             <img src={`${API_URL}/api/stream`} alt="Camera live" className="camera-feed" />
             <div className="camera-overlay">
-              <div className={`camera-reticle ${step === 'signing' ? 'reticle-scanning' : ''}`} />
+              <div className={`camera-reticle ${step === 'scanning' ? 'reticle-scanning' : ''} ${step === 'verifying' ? 'reticle-verifying' : ''}`} />
             </div>
           </div>
 
@@ -128,10 +159,21 @@ export default function SendScreen() {
             </>
           )}
 
-          {step === 'signing' && (
+          {(step === 'scanning' || step === 'verifying' || step === 'sending') && (
             <>
-              <div className="scan-status"><span className="scan-status-dot" /><span>{status}</span></div>
-              <p className="scan-hint">Le scan est automatique — gardez votre oeil devant la camera</p>
+              <div className="scan-status">
+                <span className="scan-status-dot" />
+                <span>{status}</span>
+              </div>
+              {step === 'verifying' && (
+                <p className="scan-hint">Le matching iris s'execute dans un TEE Chainlink — aucune donnee biometrique n'est exposee</p>
+              )}
+              {step === 'scanning' && (
+                <p className="scan-hint">Le scan est automatique — gardez votre oeil devant la camera</p>
+              )}
+              {step === 'sending' && (
+                <p className="scan-hint">Transaction en cours d'envoi sur Sepolia...</p>
+              )}
               <button className="btn-link" onClick={cancelScan}>Annuler</button>
             </>
           )}

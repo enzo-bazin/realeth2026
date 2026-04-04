@@ -1,0 +1,6 @@
+{
+  "backendUrl": "https://irisgate.example.com",
+  "irisVerifierAddress": "0x8a5F9475e329375fbE17a2766c43c9EFd165C645",
+  "matchThreshold": 0.35,
+  "chainId": 11155111
+}

@@ -35,9 +35,26 @@
       ]
     },
     {
+      "selector": "onReport(bytes,bytes)",
+      "label": "Receive Chainlink CRE Report",
+      "description": "Receive a signed iris match report from the Chainlink CRE TEE via the KeystoneForwarder. Contains the biometric match result computed confidentially.",
+      "parameters": [
+        {
+          "name": "metadata",
+          "label": "Forwarder Metadata",
+          "description": "Chainlink KeystoneForwarder metadata (workflow ID, signatures)"
+        },
+        {
+          "name": "report",
+          "label": "Match Report",
+          "description": "ABI-encoded match result (wallet, matched, confidence, nonce)"
+        }
+      ]
+    },
+    {
       "selector": "approveTransaction(address,bytes32)",
       "label": "Approve Transaction with Iris",
-      "description": "Approve a blockchain transaction using your iris scan. Requires a valid iris match.",
+      "description": "Approve a blockchain transaction using your iris scan. Requires a valid iris match verified by Chainlink CRE.",
       "parameters": [
         {
           "name": "wallet",

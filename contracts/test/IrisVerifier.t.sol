@@ -11,6 +11,7 @@ contract IrisVerifierTest is Test {
 
     address public deployer = makeAddr("deployer");
     address public oracle = makeAddr("oracle");
+    address public forwarder = makeAddr("forwarder");
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
     bytes32 public constant IRIS_1 = keccak256("iris_alice");
@@ -20,13 +21,16 @@ contract IrisVerifierTest is Test {
         vm.startPrank(deployer);
         registry = new IrisRegistry();
         irisVerifier = new IrisVerifier(registry, oracle, EXPIRATION_BLOCKS);
+        irisVerifier.setKeystoneForwarder(forwarder);
         vm.stopPrank();
 
         // Register alice
         registry.registerWallet(alice, IRIS_1);
     }
 
-    // --- submitMatchResult ---
+    // =====================================================================
+    // submitMatchResult (legacy oracle path)
+    // =====================================================================
 
     function test_submitMatchResult() public {
         vm.prank(oracle);
@@ -72,7 +76,83 @@ contract IrisVerifierTest is Test {
         irisVerifier.submitMatchResult(alice, true, 95, 1);
     }
 
-    // --- approveTransaction ---
+    // =====================================================================
+    // onReport (Chainlink CRE / KeystoneForwarder path)
+    // =====================================================================
+
+    function test_onReport_success() public {
+        bytes memory report = abi.encode(alice, true, uint256(92), uint256(100));
+        bytes memory metadata = "";
+
+        vm.prank(forwarder);
+        irisVerifier.onReport(metadata, report);
+
+        assertTrue(irisVerifier.hasValidMatch(alice));
+    }
+
+    function test_onReport_emitsReportReceived() public {
+        bytes memory report = abi.encode(alice, true, uint256(92), uint256(101));
+        bytes memory metadata = "";
+
+        vm.prank(forwarder);
+        vm.expectEmit(true, false, false, true);
+        emit IrisVerifier.ReportReceived(alice, true, 92, 101);
+        irisVerifier.onReport(metadata, report);
+    }
+
+    function test_onReport_emitsMatchResultSubmitted() public {
+        bytes memory report = abi.encode(alice, true, uint256(88), uint256(102));
+        bytes memory metadata = "";
+
+        vm.prank(forwarder);
+        vm.expectEmit(true, false, false, true);
+        emit IrisVerifier.MatchResultSubmitted(alice, true, 88, 102);
+        irisVerifier.onReport(metadata, report);
+    }
+
+    function test_revert_onReport_notForwarder() public {
+        bytes memory report = abi.encode(alice, true, uint256(92), uint256(100));
+        bytes memory metadata = "";
+
+        vm.prank(bob);
+        vm.expectRevert(IrisVerifier.OnlyForwarder.selector);
+        irisVerifier.onReport(metadata, report);
+    }
+
+    function test_revert_onReport_nonceReuse() public {
+        bytes memory report = abi.encode(alice, true, uint256(92), uint256(200));
+        bytes memory metadata = "";
+
+        vm.prank(forwarder);
+        irisVerifier.onReport(metadata, report);
+
+        vm.prank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(IrisVerifier.NonceAlreadyUsed.selector, 200));
+        irisVerifier.onReport(metadata, report);
+    }
+
+    function test_revert_onReport_walletNotRegistered() public {
+        bytes memory report = abi.encode(bob, true, uint256(92), uint256(300));
+        bytes memory metadata = "";
+
+        vm.prank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(IrisVerifier.WalletNotRegistered.selector, bob));
+        irisVerifier.onReport(metadata, report);
+    }
+
+    function test_onReport_noMatch() public {
+        bytes memory report = abi.encode(alice, false, uint256(15), uint256(400));
+        bytes memory metadata = "";
+
+        vm.prank(forwarder);
+        irisVerifier.onReport(metadata, report);
+
+        assertFalse(irisVerifier.hasValidMatch(alice));
+    }
+
+    // =====================================================================
+    // approveTransaction
+    // =====================================================================
 
     function test_approveTransaction() public {
         bytes32 txHash = keccak256("tx1");
@@ -82,6 +162,17 @@ contract IrisVerifierTest is Test {
 
         irisVerifier.approveTransaction(alice, txHash);
 
+        assertTrue(irisVerifier.isTransactionApproved(alice, txHash));
+    }
+
+    function test_approveTransaction_afterOnReport() public {
+        bytes32 txHash = keccak256("tx_cre");
+        bytes memory report = abi.encode(alice, true, uint256(90), uint256(500));
+
+        vm.prank(forwarder);
+        irisVerifier.onReport("", report);
+
+        irisVerifier.approveTransaction(alice, txHash);
         assertTrue(irisVerifier.isTransactionApproved(alice, txHash));
     }
 
@@ -136,7 +227,9 @@ contract IrisVerifierTest is Test {
         assertFalse(irisVerifier.hasValidMatch(alice));
     }
 
-    // --- hasValidMatch ---
+    // =====================================================================
+    // hasValidMatch
+    // =====================================================================
 
     function test_hasValidMatch_falseByDefault() public view {
         assertFalse(irisVerifier.hasValidMatch(alice));
@@ -158,13 +251,17 @@ contract IrisVerifierTest is Test {
         assertFalse(irisVerifier.hasValidMatch(alice));
     }
 
-    // --- isTransactionApproved ---
+    // =====================================================================
+    // isTransactionApproved
+    // =====================================================================
 
     function test_isTransactionApproved_falseByDefault() public view {
         assertFalse(irisVerifier.isTransactionApproved(alice, keccak256("tx1")));
     }
 
-    // --- Admin ---
+    // =====================================================================
+    // Admin
+    // =====================================================================
 
     function test_setOracle() public {
         vm.prank(deployer);
@@ -188,5 +285,20 @@ contract IrisVerifierTest is Test {
         vm.prank(alice);
         vm.expectRevert(IrisVerifier.OnlyOwner.selector);
         irisVerifier.setExpirationBlocks(100);
+    }
+
+    function test_setKeystoneForwarder() public {
+        address newForwarder = makeAddr("newForwarder");
+        vm.prank(deployer);
+        vm.expectEmit(true, true, false, false);
+        emit IrisVerifier.ForwarderUpdated(forwarder, newForwarder);
+        irisVerifier.setKeystoneForwarder(newForwarder);
+        assertEq(irisVerifier.keystoneForwarder(), newForwarder);
+    }
+
+    function test_revert_setKeystoneForwarder_notOwner() public {
+        vm.prank(alice);
+        vm.expectRevert(IrisVerifier.OnlyOwner.selector);
+        irisVerifier.setKeystoneForwarder(bob);
     }
 }

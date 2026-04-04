@@ -21,3 +21,20 @@ export async function register(walletName: string, walletAddress: string) {
   }
   return res.json();
 }
+
+/**
+ * Submit a wallet address for CRE iris verification.
+ * The backend captures a fresh scan and queues it for the Chainlink CRE workflow.
+ */
+export async function submitForCRE(walletAddress: string): Promise<{ nonce: number; irisHash: string }> {
+  const res = await fetch(`${API_URL}/api/cre/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ walletAddress }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Erreur lors de la soumission CRE');
+  }
+  return res.json();
+}
