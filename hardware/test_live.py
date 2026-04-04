@@ -770,92 +770,61 @@ def main_image(image_paths):
     print("=" * 60)
     print(f"\n  {len(image_paths)} image(s) a analyser\n")
 
+    raw_color = []
     raw_frames = []
     for path in image_paths:
-        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        if img is None:
+        img_color = cv2.imread(path)
+        if img_color is None:
             print(f"  [ERREUR] Impossible de lire : {path}")
             continue
-        raw_frames.append(img)
-        print(f"  Chargee : {path} ({img.shape[1]}x{img.shape[0]})")
+        raw_color.append(img_color)
+        raw_frames.append(cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY))
+        print(f"  Chargee : {path} ({img_color.shape[1]}x{img_color.shape[0]})")
 
     if not raw_frames:
         print("\n  Aucune image valide.")
         return
 
-    # Afficher toutes les images
-    print("\n  Affichage des images... (appuyez sur une touche pour continuer)")
-    for i, gray in enumerate(raw_frames):
-        win_name = f"Image {i+1}/{len(raw_frames)} — {os.path.basename(image_paths[i])}"
-        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(win_name, 640, 480)
-        cv2.moveWindow(win_name, 50 + (i % 5) * 660, 50 + (i // 5) * 520)
-        cv2.imshow(win_name, gray)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    # Detection des yeux
-    eye_frames = []
+    # Pas de crop — on utilise l'image entiere directement
+    # Afficher les images + segmentation
     best_eye = None
+    best_eye_color = None
     best_score = -1.0
-    best_quality = {}
     best_frame_idx = -1
+    eye_frames = []
 
     for i, gray in enumerate(raw_frames):
-        eye_crop = detect_best_eye(gray)
-        if eye_crop is None:
-            print(f"    image {i+1}: pas d'oeil detecte")
-            continue
-
-        eye_frames.append(eye_crop)
-        quality = compute_quality_score(eye_crop)
+        quality = compute_quality_score(gray)
         status = "OK" if quality["acceptable"] else "low quality"
-        print(f"    image {i+1}: oeil detecte — brightness={quality['brightness']} "
+        print(f"    image {i+1}: brightness={quality['brightness']} "
               f"contrast={quality['contrast']} sharpness={quality['sharpness']} [{status}]")
 
-        if not quality["acceptable"]:
-            continue
+        eye_frames.append(gray)
 
         score = quality["sharpness"] + quality["contrast"]
         if score > best_score:
             best_score = score
-            best_eye = eye_crop
-            best_quality = quality
+            best_eye = gray
+            best_eye_color = raw_color[i]
             best_frame_idx = i
-
-    # Afficher les eye crops
-    if eye_frames:
-        print(f"\n  {len(eye_frames)} oeil(s) detecte(s). Affichage...")
-        for i, ef in enumerate(eye_frames):
-            win_name = f"Eye crop {i+1}"
-            cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-            cv2.resizeWindow(win_name, 300, 300)
-            cv2.moveWindow(win_name, 50 + i * 320, 50)
-            cv2.imshow(win_name, ef)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-    if best_eye is None:
-        print(f"\n  [ECHEC] Aucun oeil de qualite suffisante.")
-        if not eye_frames:
-            print("  -> Aucun oeil detecte. L'image ne contient peut-etre pas d'oeil visible.")
-        else:
-            print("  -> Oeil detecte mais qualite insuffisante.")
-        return
 
     print(f"\n  Meilleure image : #{best_frame_idx + 1}")
 
-    # Afficher best eye avec cercles
-    best_display = cv2.cvtColor(best_eye, cv2.COLOR_GRAY2BGR)
+    # Afficher l'image en couleur avec cercles de segmentation
+    best_display = best_eye_color.copy()
     circles = detect_pupil_iris(best_eye)
     if circles is not None:
         pupil, iris = circles
         cv2.circle(best_display, (pupil[0], pupil[1]), pupil[2], YELLOW, 2)
         cv2.circle(best_display, (iris[0], iris[1]), iris[2], GREEN, 2)
         cv2.circle(best_display, (pupil[0], pupil[1]), 2, RED, -1)
-    cv2.namedWindow("Best Eye + Segmentation", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Best Eye + Segmentation", 400, 400)
-    cv2.imshow("Best Eye + Segmentation", best_display)
+        print(f"    Pupil: center=({pupil[0]}, {pupil[1]}) r={pupil[2]}")
+        print(f"    Iris:  center=({iris[0]}, {iris[1]}) r={iris[2]}")
+    else:
+        print("    Segmentation echouee — pupille/iris non detectes")
+    cv2.namedWindow("Image + Segmentation", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Image + Segmentation", 900, 700)
+    cv2.imshow("Image + Segmentation", best_display)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
@@ -915,11 +884,12 @@ def _stop_pi_stream():
 
 
 def main_remote_live():
-    """Flux continu depuis le Raspberry Pi avec scan automatique.
+    """Flux continu depuis le Raspberry Pi — indicateurs legers + scan manuel.
 
-    Quand l'image est de bonne qualite et que l'oeil est detecte,
-    le scan se lance automatiquement. Un signal vert confirme
-    que le template a ete envoye au workflow.
+    La boucle live ne fait QUE la detection Haar (rapide).
+    Les checks lourds (qualite, liveness, segmentation) ne tournent
+    que toutes les ~0.5s pour mettre a jour les indicateurs.
+    Le scan complet se lance uniquement sur ESPACE.
     """
     print("=" * 60)
     print("  IRISWALLET — Remote Live (Raspberry Pi Stream)")
@@ -943,45 +913,53 @@ def main_remote_live():
 
     print("  Connecte ! Flux en direct.")
     print()
-    print("  Le scan se lance automatiquement quand l'image est bonne.")
-    print("  Commandes : Q/ESC = quitter | D = toggle debug")
+    print("  Commandes :")
+    print("    ESPACE = lancer le scan")
+    print("    P      = prendre une photo (image brute)")
+    print("    R      = reprendre apres freeze")
+    print("    D      = toggle debug")
+    print("    Q/ESC  = quitter")
     print()
 
     cv2.namedWindow("IrisWallet — Remote Live", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("IrisWallet — Remote Live", 1280, 720)
 
-    debug_mode = False
-    recent_eye_frames = []
-    scan_done = False          # True apres un scan reussi
-    scan_display = None        # frame avec le resultat affiche
-    scan_freeze_time = 0       # timestamp du freeze apres scan
-    FREEZE_DURATION = 5.0      # secondes d'affichage du resultat
     scan_count = 0
+    photo_count = 0
     _remote_live_last_code = None
+    recent_eye_frames = []
 
-    # Compteur de frames consecutives "ready"
-    ready_streak = 0
-    READY_THRESHOLD = 5  # nb de frames OK consecutives avant scan auto
+    frozen = False
+    frozen_display = None
+
+    # Indicateurs mis a jour periodiquement (pas chaque frame)
+    last_check_time = 0
+    CHECK_INTERVAL = 0.5  # secondes entre chaque check lourd
+    indicator_eye = False
+    indicator_quality = False
+    indicator_brightness = "-"
+    indicator_contrast = "-"
+    indicator_sharpness = "-"
+    indicator_ready = False
 
     while True:
-        # --- Si on est en freeze post-scan, afficher le resultat ---
-        if scan_done:
-            cv2.imshow("IrisWallet — Remote Live", scan_display)
+        # --- Si frozen, afficher le resultat ---
+        if frozen:
+            cv2.imshow("IrisWallet — Remote Live", frozen_display)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord('q'), 27):
                 break
-            if time.time() - scan_freeze_time > FREEZE_DURATION:
-                scan_done = False
-                scan_display = None
-                ready_streak = 0
+            elif key == ord('r'):
+                frozen = False
+                frozen_display = None
+                print("[RESUME] Camera live")
             continue
 
         ret, frame = cap.read()
         if not ret:
-            # Tentative de reconnexion
-            draw_text_on = np.zeros((720, 1280, 3), dtype=np.uint8)
-            draw_text(draw_text_on, "Connexion perdue... reconnexion...", (400, 360), RED, 0.8)
-            cv2.imshow("IrisWallet — Remote Live", draw_text_on)
+            blank = np.zeros((720, 1280, 3), dtype=np.uint8)
+            draw_text(blank, "Connexion perdue... reconnexion...", (400, 360), RED, 0.8)
+            cv2.imshow("IrisWallet — Remote Live", blank)
             key = cv2.waitKey(500) & 0xFF
             if key in (ord('q'), 27):
                 break
@@ -992,179 +970,146 @@ def main_remote_live():
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         display = frame.copy()
 
-        # --- Detection de l'oeil ---
+        # --- Detection oeil (Haar = rapide, chaque frame) ---
         eyes = _eye_cascade.detectMultiScale(
             gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40)
         )
 
-        eye_detected = len(eyes) > 0
         eye_crop = None
-        panel_lines = []
-        advice = []
-        is_ready = False
-
-        if eye_detected:
+        if len(eyes) > 0:
             largest = max(eyes, key=lambda e: e[2] * e[3])
             x, y, w, h = largest
-
             mx, my = int(w * 0.2), int(h * 0.2)
             x1, y1 = max(0, x - mx), max(0, y - my)
             x2, y2 = min(gray.shape[1], x + w + mx), min(gray.shape[0], y + h + my)
-
             eye_crop = gray[y1:y2, x1:x2]
 
             cv2.rectangle(display, (x1, y1), (x2, y2), GREEN, 2)
-            draw_text(display, "EYE DETECTED", (x1, y1 - 10), GREEN)
 
             recent_eye_frames.append(eye_crop.copy())
             if len(recent_eye_frames) > 10:
                 recent_eye_frames.pop(0)
 
-            # Qualite
-            quality = compute_quality_score(eye_crop)
-            panel_lines.append(("--- QUALITY ---", GRAY))
-            panel_lines.append(
-                (f"Brightness: {quality['brightness']}", status_color(40 <= quality['brightness'] <= 220))
-            )
-            panel_lines.append(
-                (f"Contrast:   {quality['contrast']}", status_color(quality['contrast'] >= 30))
-            )
-            panel_lines.append(
-                (f"Sharpness:  {quality['sharpness']}", status_color(quality['sharpness'] >= 20))
-            )
-            panel_lines.append(
-                (f"Acceptable: {'YES' if quality['acceptable'] else 'NO'}", status_color(quality['acceptable']))
-            )
-
-            if quality['brightness'] < 40:
-                advice.append(("! Trop sombre", RED))
-            elif quality['brightness'] > 220:
-                advice.append(("! Trop lumineux", RED))
-            if quality['contrast'] < 30:
-                advice.append(("! Contraste faible", YELLOW))
-            if quality['sharpness'] < 20:
-                advice.append(("! Image floue — rapprochez-vous", YELLOW))
-
-            # Liveness
-            specular = check_specular_reflection(eye_crop)
-            texture = check_texture_liveness(eye_crop)
-            panel_lines.append(("--- LIVENESS ---", GRAY))
-            panel_lines.append(
-                (f"Specular: {'PASS' if specular['passed'] else 'FAIL'} ({specular['specular_spots']} spots)",
-                 status_color(specular['passed']))
-            )
-            panel_lines.append(
-                (f"Texture:  {'PASS' if texture['passed'] else 'FAIL'}",
-                 status_color(texture['passed']))
-            )
-
-            if not specular['passed']:
-                advice.append(("! Pas de reflet corneen", YELLOW))
-            if not texture['passed']:
-                advice.append(("! Texture trop lisse", YELLOW))
-
-            # Segmentation rapide
-            circles = detect_pupil_iris(eye_crop)
-            if circles is not None:
-                pupil, iris = circles
-                if debug_mode:
-                    cv2.circle(display, (x1 + pupil[0], y1 + pupil[1]), pupil[2], YELLOW, 2)
-                    cv2.circle(display, (x1 + iris[0], y1 + iris[1]), iris[2], GREEN, 2)
-                panel_lines.append(("--- SEGMENTATION ---", GRAY))
-                panel_lines.append((f"Pupil: r={pupil[2]}  Iris: r={iris[2]}", GREEN))
-                seg_ok = True
+        # --- Checks lourds seulement toutes les CHECK_INTERVAL secondes ---
+        now = time.time()
+        if now - last_check_time >= CHECK_INTERVAL:
+            last_check_time = now
+            if eye_crop is not None:
+                indicator_eye = True
+                q = compute_quality_score(eye_crop)
+                indicator_quality = q["acceptable"]
+                indicator_brightness = str(q["brightness"])
+                indicator_contrast = str(q["contrast"])
+                indicator_sharpness = str(q["sharpness"])
+                indicator_ready = q["acceptable"]
             else:
-                panel_lines.append(("--- SEGMENTATION ---", GRAY))
-                panel_lines.append(("Iris: NOT FOUND", RED))
-                advice.append(("! Iris non detecte — centrez l'oeil", RED))
-                seg_ok = False
+                indicator_eye = False
+                indicator_quality = False
+                indicator_brightness = "-"
+                indicator_contrast = "-"
+                indicator_sharpness = "-"
+                indicator_ready = False
 
-            # --- Est-ce pret ? ---
-            is_ready = (
-                quality['acceptable']
-                and specular['passed']
-                and texture['passed']
-                and seg_ok
-            )
+        # --- Indicateurs legers sur l'image ---
+        # Pastille oeil
+        eye_color = GREEN if indicator_eye else RED
+        cv2.circle(display, (30, 30), 12, eye_color, -1)
+        draw_text(display, "EYE" if indicator_eye else "NO EYE", (50, 35), eye_color, 0.5)
 
-            if is_ready:
-                panel_lines.append(("", WHITE))
-                panel_lines.append((">> SCAN AUTO IMMINENT... <<", GREEN))
-                ready_streak += 1
-            else:
-                ready_streak = 0
+        # Pastille qualite
+        q_color = GREEN if indicator_quality else RED
+        cv2.circle(display, (30, 60), 12, q_color, -1)
+        draw_text(display, f"QUALITY {'OK' if indicator_quality else 'LOW'}", (50, 65), q_color, 0.5)
 
+        # Details qualite (petits)
+        draw_text(display, f"B:{indicator_brightness} C:{indicator_contrast} S:{indicator_sharpness}",
+                  (50, 88), GRAY, 0.4)
+
+        # Gros indicateur central
+        if indicator_ready:
+            draw_text(display, ">> PRET — appuyez ESPACE <<",
+                      (display.shape[1] // 2 - 160, 35), GREEN, 0.7)
+        elif indicator_eye:
+            draw_text(display, "Qualite insuffisante",
+                      (display.shape[1] // 2 - 100, 35), YELLOW, 0.6)
         else:
-            draw_text(display, "NO EYE — rapprochez votre oeil", (10, gray.shape[0] - 50), RED, 0.7)
-            ready_streak = 0
-
-        # --- Afficher conseils ---
-        if advice:
-            advice_x = display.shape[1] - 350
-            for i, (text, color) in enumerate(advice):
-                draw_text(display, text, (advice_x, 20 + i * 22), color, 0.45)
-
-        # --- Barre de progression ready ---
-        if ready_streak > 0 and not scan_done:
-            progress = min(ready_streak / READY_THRESHOLD, 1.0)
-            bar_w = int(display.shape[1] * 0.6)
-            bar_x = (display.shape[1] - bar_w) // 2
-            bar_y = display.shape[0] - 60
-            cv2.rectangle(display, (bar_x, bar_y), (bar_x + bar_w, bar_y + 20), DARK_BG, -1)
-            cv2.rectangle(display, (bar_x, bar_y), (bar_x + int(bar_w * progress), bar_y + 20), GREEN, -1)
-            draw_text(display, f"Stabilite : {int(progress * 100)}%", (bar_x, bar_y - 5), GREEN, 0.5)
+            draw_text(display, "Rapprochez votre oeil",
+                      (display.shape[1] // 2 - 110, 35), RED, 0.6)
 
         # --- Barre du bas ---
         bar_y = display.shape[0] - 35
         cv2.rectangle(display, (0, bar_y), (display.shape[1], display.shape[0]), DARK_BG, -1)
-        controls = "Q=Quit | D=Debug"
-        if debug_mode:
-            controls += " | [DEBUG ON]"
+        controls = "SPACE=Scan | P=Photo | R=Resume | D=Debug | Q=Quit"
         draw_text(display, controls, (10, display.shape[0] - 12), GRAY, 0.45)
         draw_text(display, f"Scans: {scan_count}", (display.shape[1] - 100, display.shape[0] - 12), YELLOW, 0.45)
 
-        if panel_lines:
-            draw_panel(display, panel_lines, start_y=20)
+        cv2.imshow("IrisWallet — Remote Live", display)
+        key = cv2.waitKey(1) & 0xFF
 
-        # --- SCAN AUTO quand pret depuis assez longtemps ---
-        if ready_streak >= READY_THRESHOLD and eye_crop is not None:
+        if key in (ord('q'), 27):
+            break
+
+        elif key == ord('p'):
+            # Photo brute (sans overlay)
+            photo_count += 1
+            filename = f"photo_{time.strftime('%H%M%S')}_{photo_count}.jpg"
+            cv2.imwrite(filename, frame)
+            print(f"[PHOTO] Sauvegardee : {filename}")
+
+        elif key == ord('d'):
+            # Bascule : reduire l'intervalle de check pour plus de detail
+            if CHECK_INTERVAL > 0.2:
+                CHECK_INTERVAL = 0.1
+                print("[DEBUG] Checks rapides (0.1s) — peut ralentir")
+            else:
+                CHECK_INTERVAL = 0.5
+                print("[DEBUG] Checks normaux (0.5s)")
+
+        elif key == ord(' ') and eye_crop is not None:
+            # --- SCAN MANUEL ---
             scan_count += 1
-            print(f"\n>>> SCAN AUTO #{scan_count} — conditions remplies !")
+            frozen = True
+            scan_display = display.copy()
+            draw_text(scan_display, "SCAN EN COURS...",
+                      (display.shape[1] // 2 - 100, display.shape[0] // 2), YELLOW, 0.8)
+            frozen_display = scan_display
+            cv2.imshow("IrisWallet — Remote Live", frozen_display)
+            cv2.waitKey(1)
 
+            print(f"\n>>> SCAN #{scan_count} en cours...")
             report = run_scan(eye_crop, recent_eye_frames[-5:])
             print_report(report)
 
-            # Creer le display de resultat
+            # --- Affichage du resultat ---
             result_display = display.copy()
 
             if report.get("workflow_ready"):
-                # --- GROS SIGNAL VERT ---
                 overlay = result_display.copy()
-                cv2.rectangle(overlay, (0, 0), (result_display.shape[1], result_display.shape[0]),
+                cv2.rectangle(overlay, (0, 0),
+                              (result_display.shape[1], result_display.shape[0]),
                               (0, 80, 0), -1)
                 cv2.addWeighted(overlay, 0.3, result_display, 0.7, 0, result_display)
 
-                # Texte central
-                msg1 = "SCAN REUSSI"
-                msg2 = "Template envoye au workflow !"
-                msg3 = "Vous pouvez retirer votre oeil."
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 cx = result_display.shape[1] // 2
                 cy = result_display.shape[0] // 2
 
-                for text, dy, scale in [(msg1, -40, 1.2), (msg2, 20, 0.7), (msg3, 60, 0.6)]:
-                    (tw, th), _ = cv2.getTextSize(text, font, scale, 2)
+                for text, dy, scale in [("SCAN REUSSI", -40, 1.2),
+                                        ("Template envoye au workflow !", 20, 0.7),
+                                        ("Vous pouvez retirer votre oeil.", 60, 0.6),
+                                        ("Appuyez R pour reprendre", 100, 0.5)]:
+                    (tw, _), _ = cv2.getTextSize(text, font, scale, 2)
                     cv2.putText(result_display, text, (cx - tw // 2, cy + dy),
                                 font, scale, GREEN, 2, cv2.LINE_AA)
 
-                # Cercle vert
+                # Checkmark
                 cv2.circle(result_display, (cx, cy - 120), 50, GREEN, 4)
                 cv2.line(result_display, (cx - 25, cy - 120), (cx - 5, cy - 100), GREEN, 4)
                 cv2.line(result_display, (cx - 5, cy - 100), (cx + 30, cy - 145), GREEN, 4)
 
                 print("  >>> TEMPLATE ENVOYE AU WORKFLOW <<<")
 
-                # Comparaison avec scan precedent
+                # Comparaison
                 if report.get("iriscode"):
                     circles = detect_pupil_iris(eye_crop)
                     if circles:
@@ -1173,40 +1118,29 @@ def main_remote_live():
                         code_new = encode_iriscode(norm)
                         if _remote_live_last_code is not None:
                             dist = hamming_distance(_remote_live_last_code.tobytes(), code_new.tobytes())
-                            match = dist < MATCH_THRESHOLD
-                            tag = "MATCH" if match else "NO MATCH"
+                            tag = "MATCH" if dist < MATCH_THRESHOLD else "NO MATCH"
                             print(f"  [MATCH vs precedent] Distance: {dist:.4f} -> {tag}")
                         _remote_live_last_code = code_new
             else:
-                # Fond rouge
                 overlay = result_display.copy()
-                cv2.rectangle(overlay, (0, 0), (result_display.shape[1], result_display.shape[0]),
+                cv2.rectangle(overlay, (0, 0),
+                              (result_display.shape[1], result_display.shape[0]),
                               (0, 0, 80), -1)
                 cv2.addWeighted(overlay, 0.3, result_display, 0.7, 0, result_display)
 
-                msg1 = "SCAN ECHOUE"
-                msg2 = "Restez en place, nouvel essai automatique..."
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 cx = result_display.shape[1] // 2
                 cy = result_display.shape[0] // 2
-                for text, dy, scale in [(msg1, -20, 1.0), (msg2, 30, 0.6)]:
-                    (tw, th), _ = cv2.getTextSize(text, font, scale, 2)
+                for text, dy, scale in [("SCAN ECHOUE", -20, 1.0),
+                                        ("Appuyez R pour reessayer", 30, 0.6)]:
+                    (tw, _), _ = cv2.getTextSize(text, font, scale, 2)
                     cv2.putText(result_display, text, (cx - tw // 2, cy + dy),
                                 font, scale, RED, 2, cv2.LINE_AA)
 
-            scan_display = result_display
-            scan_done = True
-            scan_freeze_time = time.time()
-            ready_streak = 0
+            frozen_display = result_display
 
-        cv2.imshow("IrisWallet — Remote Live", display)
-        key = cv2.waitKey(1) & 0xFF
-
-        if key in (ord('q'), 27):
-            break
-        elif key == ord('d'):
-            debug_mode = not debug_mode
-            print(f"[DEBUG] {'ON' if debug_mode else 'OFF'}")
+        elif key == ord(' ') and eye_crop is None:
+            print("[!] Aucun oeil detecte — rapprochez votre oeil")
 
     cap.release()
     cv2.destroyAllWindows()

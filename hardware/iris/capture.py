@@ -83,10 +83,28 @@ def compute_quality_score(image: np.ndarray) -> dict:
     }
 
 
-def detect_best_eye(gray_frame: np.ndarray) -> np.ndarray | None:
-    """Detecte les yeux dans l'image et retourne le crop du plus grand oeil.
+def _has_pupil(crop: np.ndarray) -> bool:
+    """Verifie qu'un crop contient bien une pupille (zone sombre au centre)."""
+    h, w = crop.shape[:2]
+    # Zone centrale (40% du crop)
+    cx, cy = w // 2, h // 2
+    rx, ry = w // 5, h // 5
+    center = crop[max(0, cy - ry):cy + ry, max(0, cx - rx):cx + rx]
+    if center.size == 0:
+        return False
+    # La zone centrale doit etre plus sombre que les bords
+    border_mean = (np.mean(crop[:ry, :]) + np.mean(crop[-ry:, :]) +
+                   np.mean(crop[:, :rx]) + np.mean(crop[:, -rx:])) / 4
+    center_mean = np.mean(center)
+    # La pupille est sombre -> le centre doit etre nettement plus sombre que les bords
+    return center_mean < border_mean * 0.85
 
-    Utilise le Haar Cascade haarcascade_eye.xml.
+
+def detect_best_eye(gray_frame: np.ndarray) -> np.ndarray | None:
+    """Detecte les yeux dans l'image et retourne le crop du meilleur oeil.
+
+    Utilise le Haar Cascade haarcascade_eye.xml + verification de pupille
+    pour filtrer les faux positifs (sourcils, coins d'oeil, peau).
     Retourne l'image croppee en niveaux de gris ou None si aucun oeil detecte.
     """
     eyes = _eye_cascade.detectMultiScale(
@@ -99,19 +117,26 @@ def detect_best_eye(gray_frame: np.ndarray) -> np.ndarray | None:
     if len(eyes) == 0:
         return None
 
-    # Prendre l'oeil avec la plus grande surface (le plus net / proche)
-    largest = max(eyes, key=lambda e: e[2] * e[3])
-    x, y, w, h = largest
+    # Trier par taille decroissante et prendre le premier qui a une pupille
+    sorted_eyes = sorted(eyes, key=lambda e: e[2] * e[3], reverse=True)
 
-    # Ajouter une marge de 20% autour de l'oeil pour garder le contexte iris
-    margin_x = int(w * 0.2)
-    margin_y = int(h * 0.2)
-    x1 = max(0, x - margin_x)
-    y1 = max(0, y - margin_y)
-    x2 = min(gray_frame.shape[1], x + w + margin_x)
-    y2 = min(gray_frame.shape[0], y + h + margin_y)
+    for (x, y, w, h) in sorted_eyes:
+        # Crop sans marge pour le test pupille
+        crop = gray_frame[y:y + h, x:x + w]
+        if not _has_pupil(crop):
+            continue
 
-    return gray_frame[y1:y2, x1:x2]
+        # Bon candidat — ajouter la marge pour le crop final
+        margin_x = int(w * 0.6)
+        margin_y = int(h * 0.6)
+        x1 = max(0, x - margin_x)
+        y1 = max(0, y - margin_y)
+        x2 = min(gray_frame.shape[1], x + w + margin_x)
+        y2 = min(gray_frame.shape[0], y + h + margin_y)
+
+        return gray_frame[y1:y2, x1:x2]
+
+    return None
 
 
 def _capture_remote_frames() -> list[np.ndarray]:
