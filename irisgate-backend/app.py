@@ -40,6 +40,12 @@ CORS(app)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "irisgate.db")
 MATCH_THRESHOLD = 0.35
+CRE_API_KEY = os.environ.get("CRE_API_KEY", "dev-key-changeme")
+
+# Pending scans for Chainlink CRE — {nonce: {walletAddress, scanIrisCodes, ...}}
+_pending_scans = {}
+_pending_lock = threading.Lock()
+_nonce_counter = 0
 
 # --- Config Pi ---
 PI_USER = os.environ.get("PI_USER", "epitech")
@@ -496,12 +502,19 @@ def _autoscan_thread():
                 if match is not None:
                     wallet_info = get_account_info(match["address"])
                     wallet_info["irisHash"] = iris_hash
+
+                    # Queue for Chainlink CRE verification
+                    cre_nonce = _store_pending_scan(
+                        match["address"], template, match
+                    )
+
                     _autoscan_result = {
                         "status": "found",
                         "wallet": wallet_info,
                         "distance": round(dist, 4),
+                        "creNonce": cre_nonce,
                     }
-                    print(f"[AUTOSCAN] MATCH — {match['address'][:16]}...")
+                    print(f"[AUTOSCAN] MATCH — {match['address'][:16]}... (CRE nonce={cre_nonce})")
                 else:
                     _autoscan_result = {
                         "status": "unknown",
@@ -577,6 +590,142 @@ def api_autoscan_stop():
     global _autoscan_active
     _autoscan_active = False
     return jsonify({"status": "stopped"})
+
+
+# ======================================================================
+#  Chainlink CRE endpoints — called by the CRE workflow via Confidential HTTP
+# ======================================================================
+
+def _check_cre_auth():
+    """Validates the Bearer token against CRE_API_KEY."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer ") or auth[7:] != CRE_API_KEY:
+        return False
+    return True
+
+
+def _serialize_codes_for_cre(codes):
+    """Serialize numpy iris/mask codes to JSON-friendly format for the CRE TEE."""
+    parts = []
+    for arr in codes:
+        parts.append({
+            "shape": list(arr.shape),
+            "dtype": str(arr.dtype),
+            "data": arr.tobytes().hex(),
+        })
+    return parts
+
+
+def _store_pending_scan(wallet_address, scan_template, ref_account):
+    """Store a pending scan for the CRE to pick up."""
+    global _nonce_counter
+    with _pending_lock:
+        _nonce_counter += 1
+        nonce = _nonce_counter
+
+        _pending_scans[nonce] = {
+            "walletAddress": wallet_address,
+            "scanIrisCodes": _serialize_codes_for_cre(scan_template.iris_codes),
+            "scanMaskCodes": _serialize_codes_for_cre(scan_template.mask_codes),
+            "refIrisCodes": _serialize_codes_for_cre(ref_account["template"].iris_codes),
+            "refMaskCodes": _serialize_codes_for_cre(ref_account["template"].mask_codes),
+            "nonce": nonce,
+            "createdAt": time.time(),
+        }
+    return nonce
+
+
+@app.route("/api/cre/pending", methods=["GET"])
+def api_cre_pending():
+    """Returns the oldest pending iris match request for the CRE workflow.
+
+    Protected by API key (Bearer token).
+    Returns 204 if no pending requests.
+    """
+    if not _check_cre_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    with _pending_lock:
+        if not _pending_scans:
+            return "", 204
+
+        # Return the oldest pending scan (lowest nonce)
+        oldest_nonce = min(_pending_scans.keys())
+        scan_data = _pending_scans[oldest_nonce]
+
+        # Expire old scans (> 120s)
+        now = time.time()
+        expired = [n for n, s in _pending_scans.items() if now - s["createdAt"] > 120]
+        for n in expired:
+            del _pending_scans[n]
+
+        if oldest_nonce in expired:
+            return "", 204
+
+    return jsonify(scan_data)
+
+
+@app.route("/api/cre/ack/<int:nonce>", methods=["POST"])
+def api_cre_ack(nonce):
+    """Acknowledge that a scan has been processed by the CRE.
+
+    Removes the scan from the pending queue.
+    """
+    if not _check_cre_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    with _pending_lock:
+        if nonce in _pending_scans:
+            del _pending_scans[nonce]
+            return jsonify({"status": "acknowledged", "nonce": nonce})
+        return jsonify({"error": "Nonce not found"}), 404
+
+
+@app.route("/api/cre/submit", methods=["POST"])
+def api_cre_submit():
+    """Allows the extension to submit a scan for CRE verification.
+
+    Body JSON: { walletAddress: string }
+    Captures a fresh iris scan, finds the reference template, and queues
+    the pair for CRE processing.
+
+    Returns: { nonce: int, status: "queued" }
+    """
+    data = request.get_json()
+    if not data or not data.get("walletAddress"):
+        return jsonify({"error": "walletAddress requis"}), 400
+
+    wallet_address = data["walletAddress"]
+
+    try:
+        scan_template, iris_hash = _process_captured_frame()
+
+        # Find the reference account for this wallet
+        accounts = load_all_accounts()
+        ref_account = None
+        for acc in accounts:
+            if acc["address"].lower() == wallet_address.lower():
+                ref_account = acc
+                break
+
+        if ref_account is None:
+            return jsonify({"error": "Wallet non enregistre"}), 404
+
+        nonce = _store_pending_scan(wallet_address, scan_template, ref_account)
+
+        return jsonify({
+            "status": "queued",
+            "nonce": nonce,
+            "irisHash": iris_hash,
+        })
+
+    except RuntimeError as e:
+        msg = str(e)
+        if "EyeOrientationEstimationError" in msg or "VectorizationError" in msg or "Geometry" in msg:
+            return jsonify({"error": "Iris non detecte. Rapprochez votre oeil et gardez-le bien ouvert."}), 422
+        return jsonify({"error": f"Erreur scan: {msg}"}), 422
+    except Exception as e:
+        return jsonify({"error": f"Erreur: {e}"}), 500
 
 
 # ======================================================================
@@ -734,6 +883,11 @@ if __name__ == "__main__":
     print("    POST /api/scan      — scanner iris via Pi")
     print("    POST /api/register  — creer un compte")
     print("    GET  /api/accounts  — lister les comptes")
+    print()
+    print("  Endpoints Chainlink CRE:")
+    print("    GET  /api/cre/pending     — next pending scan (CRE only)")
+    print("    POST /api/cre/ack/<nonce> — acknowledge processed scan")
+    print("    POST /api/cre/submit      — queue scan for CRE verification")
     print()
     print("  Endpoints directs:")
     print("    POST /enroll    — inscrire (upload image)")
