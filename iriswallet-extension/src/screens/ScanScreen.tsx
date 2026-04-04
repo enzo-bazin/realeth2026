@@ -44,7 +44,10 @@ export default function ScanScreen() {
 
           // Restore private key from backend
           const pk = data.wallet?.privateKey;
-          if (pk) {
+          const irisAddr = data.wallet?.irisAddress;
+          if (pk && irisAddr) {
+            storePK(irisAddr as Address, pk as Hex);
+          } else if (pk) {
             storePK(address as Address, pk as Hex);
           }
 
@@ -60,6 +63,9 @@ export default function ScanScreen() {
             balance,
             createdAt: created,
             onChain: true,
+            isMultisig: !!data.wallet?.ledgerAddress,
+            irisAddress: data.wallet?.irisAddress,
+            ledgerAddress: data.wallet?.ledgerAddress,
           });
           setScreen('dashboard');
         } else if (data.status === 'unknown') {

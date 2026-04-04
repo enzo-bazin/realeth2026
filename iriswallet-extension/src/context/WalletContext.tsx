@@ -9,6 +9,9 @@ export interface WalletData {
   createdAt: string;
   onChain: boolean;
   txHash?: string;
+  isMultisig?: boolean;
+  irisAddress?: string;
+  ledgerAddress?: string;
 }
 
 interface WalletContextType {
