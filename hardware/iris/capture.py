@@ -3,6 +3,9 @@
 import cv2
 import numpy as np
 import os
+import subprocess
+import tempfile
+import glob as glob_module
 
 import config
 
@@ -14,7 +17,7 @@ _eye_cascade = cv2.CascadeClassifier(_CASCADE_PATH)
 
 # Seuils de qualite
 MIN_CONTRAST = 30.0     # ecart-type minimum des pixels
-MIN_SHARPNESS = 50.0    # score Laplacien minimum (flou si trop bas)
+MIN_SHARPNESS = 20.0    # score Laplacien minimum (baisse car calcule sur zone iris centrale)
 MIN_BRIGHTNESS = 40     # moyenne de pixels minimum
 MAX_BRIGHTNESS = 220    # moyenne de pixels maximum
 
@@ -58,7 +61,13 @@ def compute_quality_score(image: np.ndarray) -> dict:
     """
     brightness = float(np.mean(image))
     contrast = float(np.std(image))
-    sharpness = float(cv2.Laplacian(image, cv2.CV_64F).var())
+
+    # Sharpness sur la zone centrale (iris) pour eviter que peau/cils diluent le score
+    h, w = image.shape[:2]
+    cx, cy = w // 2, h // 2
+    r = min(cx, cy) // 2
+    iris_region = image[max(0, cy - r):cy + r, max(0, cx - r):cx + r]
+    sharpness = float(cv2.Laplacian(iris_region, cv2.CV_64F).var())
 
     acceptable = (
         contrast >= MIN_CONTRAST
@@ -105,31 +114,94 @@ def detect_best_eye(gray_frame: np.ndarray) -> np.ndarray | None:
     return gray_frame[y1:y2, x1:x2]
 
 
-def capture_eye_image() -> tuple[np.ndarray | None, dict, list[np.ndarray]]:
-    """Capture une image de l'oeil depuis la camera.
+def _capture_remote_frames() -> list[np.ndarray]:
+    """Capture des photos en rafale sur le Raspberry Pi via SSH.
 
-    Detecte automatiquement l'oeil, crop dessus, et evalue la qualite.
-    Retourne (image_croppee, quality_info, eye_frames) ou (None, quality_info, []) si echec.
+    Retourne une liste d'images (grayscale numpy arrays).
     """
+    pi = f"{config.PI_USER}@{config.PI_IP}"
+    count = config.PI_BURST_COUNT
+    remote_dir = config.PI_PHOTO_DIR
+
+    # Lancer le script de capture en rafale sur le Pi
+    ssh_cmd = [
+        "ssh", pi,
+        f"bash {config.PI_CAPTURE_SCRIPT} {count} {remote_dir}"
+    ]
+    result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        print(f"[REMOTE] SSH capture failed: {result.stderr}")
+        return []
+
+    # Rapatrier toutes les photos en une seule commande scp
+    local_tmp = tempfile.mkdtemp(prefix="iris_burst_")
+    scp_cmd = [
+        "scp", f"{pi}:{remote_dir}/burst_*.jpg", local_tmp
+    ]
+    result = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        print(f"[REMOTE] SCP failed: {result.stderr}")
+        return []
+
+    # Charger les images en grayscale
+    frames = []
+    for path in sorted(glob_module.glob(os.path.join(local_tmp, "burst_*.jpg"))):
+        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        if img is not None:
+            frames.append(img)
+        os.remove(path)
+    os.rmdir(local_tmp)
+
+    print(f"[REMOTE] Got {len(frames)} frames from Pi")
+    return frames
+
+
+def _capture_local_frames() -> list[np.ndarray]:
+    """Capture des frames depuis une camera locale via OpenCV."""
     cap = cv2.VideoCapture(config.CAMERA_INDEX)
     if not cap.isOpened():
-        return None, {"error": f"camera_unavailable (index={config.CAMERA_INDEX})"}, []
+        return []
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAPTURE_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAPTURE_HEIGHT)
 
-    # Capturer plusieurs frames pour qualite + anti-spoofing (mouvement)
+    frames = []
+    for _ in range(5):
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frames.append(gray)
+
+    cap.release()
+    return frames
+
+
+def capture_eye_image() -> tuple[np.ndarray | None, dict, list[np.ndarray]]:
+    """Capture une image de l'oeil depuis la camera.
+
+    Utilise le mode configure dans config.CAPTURE_MODE :
+    - "remote" : capture en rafale sur le Raspberry Pi via SSH
+    - "local"  : capture depuis une webcam locale via OpenCV
+
+    Detecte automatiquement l'oeil, crop dessus, et evalue la qualite.
+    Retourne (image_croppee, quality_info, eye_frames) ou (None, quality_info, []) si echec.
+    """
+    if config.CAPTURE_MODE == "remote":
+        raw_frames = _capture_remote_frames()
+        if not raw_frames:
+            return None, {"error": "remote_capture_failed (Pi unreachable or no photos)"}, []
+    else:
+        raw_frames = _capture_local_frames()
+        if not raw_frames:
+            return None, {"error": f"camera_unavailable (index={config.CAMERA_INDEX})"}, []
+
     best_eye = None
     best_score = -1.0
     best_quality = {}
     eye_frames = []
 
-    for _ in range(5):
-        ret, frame = cap.read()
-        if not ret:
-            continue
-
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    for gray in raw_frames:
         eye_crop = detect_best_eye(gray)
 
         if eye_crop is None:
@@ -146,8 +218,6 @@ def capture_eye_image() -> tuple[np.ndarray | None, dict, list[np.ndarray]]:
             best_score = score
             best_eye = eye_crop
             best_quality = quality
-
-    cap.release()
 
     if best_eye is None:
         return None, {"error": "no_eye_detected"}, []

@@ -34,3 +34,5 @@ PI_PHOTO_DIR = "/home/epitech/Desktop/burst_photos"
 PI_BURST_COUNT = int(os.environ.get("PI_BURST_COUNT", "5"))
 # Mode de capture : "local" (webcam USB) ou "remote" (Raspberry Pi SSH)
 CAPTURE_MODE = os.environ.get("CAPTURE_MODE", "remote")
+# Port du stream MJPEG pour le mode remote live
+PI_STREAM_PORT = int(os.environ.get("PI_STREAM_PORT", "8888"))
