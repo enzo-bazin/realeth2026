@@ -83,6 +83,57 @@ export default function Home() {
     },
   ];
 
+  const guide = [
+    {
+      step: "01",
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+          <line x1="12" y1="18" x2="12.01" y2="18"/>
+        </svg>
+      ),
+      title: "Open the App",
+      description:
+        "Launch the IrisWallet extension on your device. The camera overlay appears automatically, no setup required.",
+    },
+    {
+      step: "02",
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      ),
+      title: "Scan Your Iris",
+      description:
+        "Align your eye with the guided ring and tap Scan. A biometric fingerprint is derived in under 2 seconds.",
+    },
+    {
+      step: "03",
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      ),
+      title: "Register or Unlock",
+      description:
+        "New iris? A wallet is created and cryptographically bound to your identity. Already enrolled? You're instantly authenticated.",
+    },
+    {
+      step: "04",
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+      ),
+      title: "Manage Your Wallet",
+      description:
+        "View your balance, wallet address, and transaction history — all behind your iris. No passwords. No seed phrases.",
+    },
+  ];
+
   const securityItems = [
     "Biometric decision gates before any wallet access",
     "Clear separation between capture, verification, and unlock stages",
@@ -108,6 +159,7 @@ export default function Home() {
           <nav className="nav-links" aria-label="Main navigation">
             <a href="#product">Product</a>
             <a href="#workflow">Workflow</a>
+            <a href="#how-to-use">How to Use</a>
             <a href="#screens">Screens</a>
           </nav>
         </div>
@@ -296,6 +348,34 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── How to Use ──────────────────────── */}
+      <section id="how-to-use" className="section-pad">
+        <div className="section-inner">
+          <div className="section-head reveal">
+            <p className="eyebrow">Get Started</p>
+            <h2>Up and running in four steps.</h2>
+            <p className="subtitle">
+              No passwords, no seed phrases. Just your iris and your wallet.
+            </p>
+          </div>
+          <div className="guide-grid">
+            {guide.map((item, i) => (
+              <article
+                key={item.step}
+                className={`guide-card reveal reveal-delay-${i + 1}`}
+              >
+                <div className="guide-card-top">
+                  <span className="guide-step">{item.step}</span>
+                  <div className="guide-icon">{item.icon}</div>
+                </div>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── App Screens ─────────────────────── */}
       <section id="screens" className="section-pad">
         <div className="section-inner">
@@ -342,6 +422,7 @@ export default function Home() {
           <div className="footer-links">
             <a href="#product">Product</a>
             <a href="#workflow">Workflow</a>
+            <a href="#how-to-use">How to Use</a>
             <a href="#screens">Screens</a>
           </div>
         </div>
