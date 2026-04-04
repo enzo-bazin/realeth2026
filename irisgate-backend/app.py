@@ -317,9 +317,10 @@ def api_scan():
 def api_register():
     """Enregistre un nouvel iris avec un nom de wallet.
 
-    Body JSON: { irisHash: string, walletName: string }
-    Le irisHash vient du /api/scan precedent. On re-capture pour avoir
-    le template frais (le hash sert juste de confirmation).
+    Body JSON: { walletName: string, walletAddress?: string }
+    Utilise le template iris deja en cache (du dernier autoscan reussi)
+    pour eviter de re-capturer — l'utilisateur n'a pas besoin de rester
+    devant la camera.
 
     Retourne:
         - {found: true, wallet: WalletData}
@@ -333,8 +334,12 @@ def api_register():
         return jsonify({"error": "walletName requis"}), 400
 
     try:
-        # Re-capture pour avoir le template
-        template, iris_hash = _process_captured_frame()
+        # Utiliser le template en cache du dernier autoscan
+        template = _last_template
+        iris_hash = _last_iris_hash
+
+        if template is None:
+            return jsonify({"error": "Aucun scan recent. Veuillez scanner votre iris d'abord."}), 400
 
         # Verifier que cet iris n'existe pas deja
         match, dist = _find_match(template)
@@ -360,11 +365,6 @@ def api_register():
             "wallet": wallet_info,
         }), 201
 
-    except RuntimeError as e:
-        msg = str(e)
-        if "EyeOrientationEstimationError" in msg or "VectorizationError" in msg or "Geometry" in msg:
-            return jsonify({"error": "Iris non detecte. Rapprochez votre oeil et gardez-le bien ouvert."}), 422
-        return jsonify({"error": f"Erreur scan: {msg}"}), 422
     except Exception as e:
         return jsonify({"error": f"Erreur: {e}"}), 500
 
@@ -384,6 +384,8 @@ _last_frame = None  # derniere frame brute (numpy)
 _autoscan_active = False
 _autoscan_result = None  # resultat du dernier auto-scan
 _autoscan_event = threading.Event()
+_last_template = None  # dernier template iris reussi (pour register sans re-capture)
+_last_iris_hash = None
 _eye_cascade = cv2.CascadeClassifier(
     os.path.join(cv2.data.haarcascades, "haarcascade_eye.xml")
 )
@@ -491,6 +493,12 @@ def _autoscan_thread():
 
             try:
                 template, iris_hash = process_image(tmp.name)
+
+                # Stocker le template pour register/transaction sans re-capture
+                global _last_template, _last_iris_hash
+                _last_template = template
+                _last_iris_hash = iris_hash
+
                 match, dist = _find_match(template)
 
                 if match is not None:
