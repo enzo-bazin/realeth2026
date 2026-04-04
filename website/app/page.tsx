@@ -212,7 +212,7 @@ export default function Home() {
                       <span>Chainlink</span>
                     </a>
                     <a className="partner-logo" href="https://unlink.io" target="_blank" rel="noopener noreferrer">
-                      <Image src="/logo-unlink.jpeg" alt="Unlink Labs" width={40} height={40} />
+                      <Image src="/logo-unlink.png" alt="Unlink Labs" width={40} height={40} />
                       <span>Unlink Labs</span>
                     </a>
                   </div>
