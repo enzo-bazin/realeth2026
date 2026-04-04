@@ -319,8 +319,40 @@ body {
 
 /* ── Misc ── */
 
-.scan-hint {
+.scan-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #00d4ff;
+}
+
+.scan-status.warning {
+  color: #ffaa00;
   font-size: 12px;
+}
+
+.camera-reticle.reticle-warning {
+  border-color: rgba(255, 170, 0, 0.7);
+  box-shadow: 0 0 20px rgba(255, 170, 0, 0.2);
+}
+
+.scan-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00d4ff;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.scan-hint {
+  font-size: 11px;
   color: #8892a6;
   text-align: center;
   padding: 2px 20px;

@@ -1,35 +1,75 @@
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useWallet } from '../context/WalletContext';
-import { scanIris } from '../services/api';
 
 const API_URL = 'http://localhost:5000';
 
 export default function ScanScreen() {
   const { setScreen, setWallet, setCurrentHash } = useWallet();
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('Recherche de votre oeil...');
   const [error, setError] = useState('');
+  const [unknownHash, setUnknownHash] = useState('');
+  const eventSourceRef = useRef<EventSource | null>(null);
 
-  const handleScan = async () => {
-    setLoading(true);
+  const startAutoScan = () => {
+    // Reset state
     setError('');
-    setStatus('Scan en cours...');
-    try {
-      const result = await scanIris();
+    setUnknownHash('');
+    setStatus('Recherche de votre oeil...');
 
-      if (result.found) {
-        setWallet(result.wallet);
-        setScreen('dashboard');
-      } else {
-        setCurrentHash(result.irisHash);
-        setScreen('register');
-      }
-    } catch (e: any) {
-      setError(e.message || 'Impossible de contacter le serveur');
-    } finally {
-      setLoading(false);
-      setStatus('');
+    // Fermer l'ancienne connexion si elle existe
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      fetch(`${API_URL}/api/autoscan/stop`, { method: 'POST' }).catch(() => {});
     }
+
+    const es = new EventSource(`${API_URL}/api/autoscan`);
+    eventSourceRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.status === 'scanning') {
+          setStatus('Recherche de votre oeil...');
+          return;
+        }
+
+        es.close();
+        eventSourceRef.current = null;
+
+        if (data.status === 'found') {
+          setWallet(data.wallet);
+          setScreen('dashboard');
+        } else if (data.status === 'unknown') {
+          setCurrentHash(data.irisHash);
+          setUnknownHash(data.irisHash);
+          setStatus('Iris non reconnu');
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    es.onerror = () => {
+      setError('Connexion au serveur perdue');
+      es.close();
+      eventSourceRef.current = null;
+    };
+  };
+
+  useEffect(() => {
+    startAutoScan();
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      fetch(`${API_URL}/api/autoscan/stop`, { method: 'POST' }).catch(() => {});
+    };
+  }, []);
+
+  const handleRetry = () => {
+    setUnknownHash('');
+    startAutoScan();
   };
 
   return (
@@ -46,29 +86,35 @@ export default function ScanScreen() {
           className="camera-feed"
         />
         <div className="camera-overlay">
-          <div className="camera-reticle" />
+          <div className={`camera-reticle ${unknownHash ? 'reticle-warning' : ''}`} />
         </div>
       </div>
 
-      <p className="scan-hint">
-        Placez votre oeil devant la camera
-      </p>
-
-      <button className="btn-primary" onClick={handleScan} disabled={loading}>
-        {loading ? (
-          <>
-            <span className="spinner" />
-            <span className="loading-text">{status}</span>
-          </>
-        ) : (
-          <>
-            <span className="btn-icon">👁</span>
-            Scanner mon iris
-          </>
-        )}
-      </button>
-
-      {error && <p className="error-msg">{error}</p>}
+      {error ? (
+        <p className="error-msg">{error}</p>
+      ) : unknownHash ? (
+        <>
+          <p className="scan-status warning">
+            Iris non reconnu — aucun compte associe
+          </p>
+          <button className="btn-primary" onClick={() => setScreen('register')}>
+            Creer un compte
+          </button>
+          <button className="btn-link" onClick={handleRetry}>
+            Reessayer le scan
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="scan-status">
+            <span className="scan-status-dot" />
+            <span>{status}</span>
+          </div>
+          <p className="scan-hint">
+            Placez votre oeil devant la camera, le scan est automatique
+          </p>
+        </>
+      )}
     </div>
   );
 }

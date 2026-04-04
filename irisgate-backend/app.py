@@ -378,11 +378,20 @@ def api_auth():
 # --- Stream MJPEG pour l'extension ---
 
 _last_jpeg = None  # cache la derniere frame encodee
+_last_frame = None  # derniere frame brute (numpy)
+
+# --- Auto-scan state ---
+_autoscan_active = False
+_autoscan_result = None  # resultat du dernier auto-scan
+_autoscan_event = threading.Event()
+_eye_cascade = cv2.CascadeClassifier(
+    os.path.join(cv2.data.haarcascades, "haarcascade_eye.xml")
+)
 
 
 def _stream_reader_thread():
     """Thread qui lit les frames en continu et les encode en JPEG."""
-    global _last_jpeg, _stream_cap
+    global _last_jpeg, _last_frame, _stream_cap
     while True:
         if _scanning:
             time.sleep(0.05)
@@ -396,7 +405,7 @@ def _stream_reader_thread():
             if not ret:
                 time.sleep(0.05)
                 continue
-            # Encode directement sans resize — la cam est deja a 320x240 equiv
+            _last_frame = frame.copy()
             _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
             _last_jpeg = jpeg.tobytes()
         except Exception:
@@ -428,6 +437,146 @@ def api_stream():
         _generate_mjpeg(),
         mimetype='multipart/x-mixed-replace; boundary=frame',
     )
+
+
+# --- Auto-scan (mode Face ID) ---
+
+def _autoscan_thread():
+    """Thread qui detecte un oeil et lance la pipeline automatiquement."""
+    global _autoscan_result, _scanning
+
+    consecutive_detections = 0
+    REQUIRED_DETECTIONS = 3  # 3 detections consecutives avant scan
+
+    while True:
+        if not _autoscan_active or _scanning:
+            consecutive_detections = 0
+            time.sleep(0.2)
+            continue
+
+        frame = _last_frame
+        if frame is None:
+            time.sleep(0.2)
+            continue
+
+        # Pre-detection rapide avec Haar cascade
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        eyes = _eye_cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+        )
+
+        if len(eyes) > 0:
+            consecutive_detections += 1
+        else:
+            consecutive_detections = 0
+            time.sleep(0.3)
+            continue
+
+        if consecutive_detections < REQUIRED_DETECTIONS:
+            time.sleep(0.3)
+            continue
+
+        # Oeil detecte de facon stable — lancer la pipeline
+        consecutive_detections = 0
+        print("[AUTOSCAN] Oeil detecte, lancement pipeline...")
+
+        _scanning = True
+        time.sleep(0.1)
+
+        try:
+            # Sauvegarder la frame courante
+            tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+            cv2.imwrite(tmp.name, frame)
+            tmp.close()
+
+            try:
+                template, iris_hash = process_image(tmp.name)
+                match, dist = _find_match(template)
+
+                if match is not None:
+                    wallet_info = get_account_info(match["address"])
+                    wallet_info["irisHash"] = iris_hash
+                    _autoscan_result = {
+                        "status": "found",
+                        "wallet": wallet_info,
+                        "distance": round(dist, 4),
+                    }
+                    print(f"[AUTOSCAN] MATCH — {match['address'][:16]}...")
+                else:
+                    _autoscan_result = {
+                        "status": "unknown",
+                        "irisHash": iris_hash,
+                    }
+                    print(f"[AUTOSCAN] Iris inconnu — hash={iris_hash}")
+
+                _autoscan_event.set()
+
+            except Exception as e:
+                msg = str(e)
+                if "EyeOrientationEstimationError" in msg or "VectorizationError" in msg or "Geometry" in msg:
+                    print("[AUTOSCAN] Iris mal cadre, on reessaie...")
+                else:
+                    print(f"[AUTOSCAN] Erreur pipeline: {msg}")
+                # On ne signale pas l'erreur, on reessaie
+                time.sleep(1)
+                continue
+            finally:
+                os.unlink(tmp.name)
+
+        finally:
+            _scanning = False
+
+        # Apres un scan reussi, attendre un peu avant de rescanner
+        time.sleep(3)
+
+
+@app.route("/api/autoscan", methods=["GET"])
+def api_autoscan():
+    """SSE endpoint — active l'auto-scan et envoie le resultat quand pret.
+
+    L'extension se connecte ici avec EventSource.
+    Le backend detecte l'oeil automatiquement et renvoie le resultat.
+    """
+    global _autoscan_active, _autoscan_result
+
+    def generate():
+        global _autoscan_active, _autoscan_result
+        _autoscan_active = True
+        _autoscan_result = None
+        _autoscan_event.clear()
+
+        # Envoyer un heartbeat pour confirmer la connexion
+        yield f"data: {json.dumps({'status': 'scanning'})}\n\n"
+
+        # Envoyer des heartbeats pendant qu'on attend
+        while True:
+            got_result = _autoscan_event.wait(timeout=2.0)
+            if got_result and _autoscan_result is not None:
+                result = _autoscan_result
+                _autoscan_result = None
+                _autoscan_event.clear()
+                _autoscan_active = False
+                yield f"data: {json.dumps(result)}\n\n"
+                return
+            # Heartbeat pour garder la connexion vivante
+            yield f"data: {json.dumps({'status': 'scanning'})}\n\n"
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@app.route("/api/autoscan/stop", methods=["POST"])
+def api_autoscan_stop():
+    """Arrete l'auto-scan."""
+    global _autoscan_active
+    _autoscan_active = False
+    return jsonify({"status": "stopped"})
 
 
 # ======================================================================
@@ -571,6 +720,8 @@ if __name__ == "__main__":
         _ensure_pi_stream()
         t = threading.Thread(target=_stream_reader_thread, daemon=True)
         t.start()
+        t2 = threading.Thread(target=_autoscan_thread, daemon=True)
+        t2.start()
         print("  Stream Pi connecte !")
     except Exception as e:
         print(f"  [WARN] Pi non disponible: {e}")
