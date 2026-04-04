@@ -1,4 +1,5 @@
 node_modules/
+iriswallet-extension/dist/
 hardware/venv/
 __pycache__/
 *.pyc
