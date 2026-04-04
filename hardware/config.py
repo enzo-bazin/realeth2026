@@ -24,3 +24,13 @@ AES_SHARED_KEY = os.environ.get("IRIS_AES_KEY", None)
 CAMERA_INDEX = int(os.environ.get("IRIS_CAMERA", 0))
 CAPTURE_WIDTH = 640
 CAPTURE_HEIGHT = 480
+
+# Raspberry Pi (capture distante via SSH)
+PI_USER = os.environ.get("PI_USER", "epitech")
+PI_IP = os.environ.get("PI_IP", "10.105.174.149")
+PI_CAPTURE_SCRIPT = "/home/epitech/Desktop/capture_burst.sh"
+PI_PHOTO_DIR = "/home/epitech/Desktop/burst_photos"
+# Nombre de photos a prendre en rafale (pas de flux continu)
+PI_BURST_COUNT = int(os.environ.get("PI_BURST_COUNT", "5"))
+# Mode de capture : "local" (webcam USB) ou "remote" (Raspberry Pi SSH)
+CAPTURE_MODE = os.environ.get("CAPTURE_MODE", "remote")
