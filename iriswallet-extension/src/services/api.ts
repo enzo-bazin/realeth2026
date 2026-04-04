@@ -4,7 +4,7 @@ export async function scanIris() {
   const res = await fetch(`${API_URL}/api/scan`, { method: 'POST' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Erreur lors du scan');
+    throw new Error(err.error || 'Scan error');
   }
   return res.json();
 }
@@ -17,7 +17,7 @@ export async function register(walletName: string, walletAddress: string) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Erreur lors de l'enregistrement");
+    throw new Error(err.error || "Registration error");
   }
   return res.json();
 }

@@ -1,15 +1,15 @@
-"""IrisGate Backend — API pour enrolement et identification par iris.
+"""IrisGate Backend — API for iris enrollment and identification.
 
-Endpoints pour l'extension:
-    POST /api/scan      — Capture photo via Pi + identifie l'iris
-    POST /api/register  — Enregistre un iris avec un nom de wallet
-    GET  /api/accounts  — Liste les comptes
+Extension endpoints:
+    POST /api/scan      — Capture photo via Pi + identify iris
+    POST /api/register  — Register an iris with a wallet name
+    GET  /api/accounts  — List accounts
 
-Endpoints directs (image upload):
-    POST /enroll    — Inscrit un iris (upload image)
-    POST /identify  — Identifie un iris (upload image)
+Direct endpoints (image upload):
+    POST /enroll    — Enroll an iris (upload image)
+    POST /identify  — Identify an iris (upload image)
 
-Le template iris est stocke en base (SQLite) pour le matching par Hamming distance.
+Iris templates are stored in SQLite for Hamming distance matching.
 """
 
 import os
@@ -28,7 +28,7 @@ from flask_cors import CORS
 import cv2
 import threading
 
-# Ajouter iris-recognition au path
+# Add iris-recognition to path
 IRIS_RECOGNITION_DIR = os.path.join(os.path.dirname(__file__), "..", "iris-recognition")
 sys.path.insert(0, IRIS_RECOGNITION_DIR)
 
@@ -41,7 +41,7 @@ CORS(app)
 DB_PATH = os.path.join(os.path.dirname(__file__), "irisgate.db")
 MATCH_THRESHOLD = 0.35
 
-# --- Config Pi ---
+# --- Pi Config ---
 PI_USER = os.environ.get("PI_USER", "epitech")
 PI_IP = os.environ.get("PI_IP", "10.105.174.149")
 PI_STREAM_PORT = int(os.environ.get("PI_STREAM_PORT", "8888"))
@@ -49,25 +49,25 @@ PI_STREAM_PORT = int(os.environ.get("PI_STREAM_PORT", "8888"))
 # Stream state
 _stream_cap = None
 _cap_lock = threading.Lock()
-_scanning = False  # True pendant un scan, le stream se pause
+_scanning = False  # True during a scan, stream pauses
 
 
 # --- Pi Camera ---
 
 def _ensure_pi_stream():
-    """Lance le stream Pi si pas deja actif, retourne le VideoCapture."""
+    """Start the Pi stream if not already active, return the VideoCapture."""
     global _stream_cap
     if _stream_cap is not None and _stream_cap.isOpened():
         return _stream_cap
 
     pi = f"{PI_USER}@{PI_IP}"
 
-    # Kill ancien stream
+    # Kill previous stream
     subprocess.run(["ssh", pi, "pkill -f rpicam-vid"],
                    capture_output=True, timeout=5)
     time.sleep(0.5)
 
-    # Lancer le stream
+    # Start the stream
     ssh_cmd = (
         f"nohup rpicam-vid -t 0 --codec mjpeg --width 640 --height 480 "
         f"--framerate 15 --inline -l -o tcp://0.0.0.0:{PI_STREAM_PORT} --nopreview "
@@ -82,9 +82,9 @@ def _ensure_pi_stream():
 
     if not _stream_cap.isOpened():
         _stream_cap = None
-        raise RuntimeError(f"Impossible de se connecter au stream Pi: {stream_url}")
+        raise RuntimeError(f"Cannot connect to Pi stream: {stream_url}")
 
-    # Vider le buffer (prendre la frame la plus recente)
+    # Flush buffer (get the most recent frame)
     for _ in range(5):
         _stream_cap.read()
 
@@ -92,17 +92,17 @@ def _ensure_pi_stream():
 
 
 def _capture_frame():
-    """Capture une frame depuis le Pi et la sauvegarde en fichier temp."""
+    """Capture a frame from the Pi and save it as a temp file."""
     global _scanning, _stream_cap
 
     _scanning = True
-    time.sleep(0.1)  # laisser le stream se pause
+    time.sleep(0.1)  # let the stream pause
 
     try:
         with _cap_lock:
             cap = _ensure_pi_stream()
 
-            # Vider le buffer pour avoir la frame la plus recente
+            # Flush buffer to get the most recent frame
             for _ in range(5):
                 cap.read()
 
@@ -125,7 +125,7 @@ def _capture_frame():
 
 
 def _process_captured_frame():
-    """Capture une frame depuis le Pi et la passe dans la pipeline iris."""
+    """Capture a frame from the Pi and run it through the iris pipeline."""
     image_path = _capture_frame()
     try:
         template, iris_hash = process_image(image_path)
@@ -273,18 +273,18 @@ def _find_match(template):
 
 
 # ======================================================================
-#  API pour l'extension (prefix /api)
+#  Extension API (prefix /api)
 # ======================================================================
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
-    """Capture une photo depuis le Pi et identifie l'iris.
+    """Capture a photo from the Pi and identify the iris.
 
-    Pas de body requis — le backend pilote la camera.
+    No body required — the backend controls the camera.
 
-    Retourne:
-        - {found: true, wallet: WalletData} si iris reconnu
-        - {found: false, irisHash: "..."} si iris inconnu
+    Returns:
+        - {found: true, wallet: WalletData} if iris recognized
+        - {found: false, irisHash: "..."} if iris unknown
     """
     try:
         template, iris_hash = _process_captured_frame()
@@ -308,21 +308,21 @@ def api_scan():
         msg = str(e)
         if "EyeOrientationEstimationError" in msg or "VectorizationError" in msg or "Geometry" in msg:
             return jsonify({"error": "Iris not detected. Move your eye closer and keep it open."}), 422
-        return jsonify({"error": f"Erreur scan: {msg}"}), 422
+        return jsonify({"error": f"Scan error: {msg}"}), 422
     except Exception as e:
-        return jsonify({"error": f"Erreur: {e}"}), 500
+        return jsonify({"error": f"Error: {e}"}), 500
 
 
 @app.route("/api/register", methods=["POST"])
 def api_register():
-    """Enregistre un nouvel iris avec un nom de wallet.
+    """Register a new iris with a wallet name.
 
     Body JSON: { walletName: string, walletAddress?: string }
-    Utilise le template iris deja en cache (du dernier autoscan reussi)
-    pour eviter de re-capturer — l'utilisateur n'a pas besoin de rester
-    devant la camera.
+    Uses the cached iris template (from the last successful autoscan)
+    to avoid re-capturing — the user does not need to stay
+    in front of the camera.
 
-    Retourne:
+    Returns:
         - {found: true, wallet: WalletData}
     """
     data = request.get_json()
@@ -334,14 +334,14 @@ def api_register():
         return jsonify({"error": "walletName required"}), 400
 
     try:
-        # Utiliser le template en cache du dernier autoscan
+        # Use the cached template from the last autoscan
         template = _last_template
         iris_hash = _last_iris_hash
 
         if template is None:
             return jsonify({"error": "No recent scan. Please scan your iris first."}), 400
 
-        # Verifier que cet iris n'existe pas deja
+        # Check that this iris doesn't already exist
         match, dist = _find_match(template)
         if match is not None:
             wallet_info = get_account_info(match["address"])
@@ -353,7 +353,7 @@ def api_register():
                 "distance": round(dist, 4),
             })
 
-        # Creer le compte — utilise l'adresse fournie par l'extension ou en genere une
+        # Create the account — use the address provided by the extension or generate one
         address = data.get("walletAddress") or _generate_address()
         save_account(address, wallet_name, template)
 
@@ -366,25 +366,25 @@ def api_register():
         }), 201
 
     except Exception as e:
-        return jsonify({"error": f"Erreur: {e}"}), 500
+        return jsonify({"error": f"Error: {e}"}), 500
 
 
 @app.route("/api/auth", methods=["POST"])
 def api_auth():
-    """Alias pour /api/scan — compatibilite avec l'extension existante."""
+    """Alias for /api/scan — compatibility with the existing extension."""
     return api_scan()
 
 
-# --- Stream MJPEG pour l'extension ---
+# --- MJPEG Stream for the extension ---
 
-_last_jpeg = None  # cache la derniere frame encodee
-_last_frame = None  # derniere frame brute (numpy)
+_last_jpeg = None  # cache the last encoded frame
+_last_frame = None  # last raw frame (numpy)
 
 # --- Auto-scan state ---
 _autoscan_active = False
-_autoscan_result = None  # resultat du dernier auto-scan
+_autoscan_result = None  # result of the last auto-scan
 _autoscan_event = threading.Event()
-_last_template = None  # dernier template iris reussi (pour register sans re-capture)
+_last_template = None  # last successful iris template (for register without re-capture)
 _last_iris_hash = None
 _eye_cascade = cv2.CascadeClassifier(
     os.path.join(cv2.data.haarcascades, "haarcascade_eye.xml")
@@ -392,7 +392,7 @@ _eye_cascade = cv2.CascadeClassifier(
 
 
 def _stream_reader_thread():
-    """Thread qui lit les frames en continu et les encode en JPEG."""
+    """Thread that continuously reads frames and encodes them as JPEG."""
     global _last_jpeg, _last_frame, _stream_cap
     while True:
         if _scanning:
@@ -415,7 +415,7 @@ def _stream_reader_thread():
 
 
 def _generate_mjpeg():
-    """Generateur de frames MJPEG pour le streaming HTTP."""
+    """MJPEG frame generator for HTTP streaming."""
     while True:
         try:
             if _last_jpeg is None:
@@ -434,7 +434,7 @@ def _generate_mjpeg():
 
 @app.route("/api/stream")
 def api_stream():
-    """Flux MJPEG depuis la camera du Pi. Usage: <img src="/api/stream">"""
+    """MJPEG stream from the Pi camera. Usage: <img src="/api/stream">"""
     return Response(
         _generate_mjpeg(),
         mimetype='multipart/x-mixed-replace; boundary=frame',
@@ -444,11 +444,11 @@ def api_stream():
 # --- Auto-scan (mode Face ID) ---
 
 def _autoscan_thread():
-    """Thread qui detecte un oeil et lance la pipeline automatiquement."""
+    """Thread that detects an eye and automatically launches the pipeline."""
     global _autoscan_result, _scanning
 
     consecutive_detections = 0
-    REQUIRED_DETECTIONS = 3  # 3 detections consecutives avant scan
+    REQUIRED_DETECTIONS = 3  # 3 consecutive detections before scan
 
     while True:
         if not _autoscan_active or _scanning:
@@ -461,7 +461,7 @@ def _autoscan_thread():
             time.sleep(0.2)
             continue
 
-        # Pre-detection rapide avec Haar cascade
+        # Quick pre-detection with Haar cascade
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         eyes = _eye_cascade.detectMultiScale(
             gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
@@ -478,7 +478,7 @@ def _autoscan_thread():
             time.sleep(0.3)
             continue
 
-        # Oeil detecte de facon stable — lancer la pipeline
+        # Eye detected stably — launch the pipeline
         consecutive_detections = 0
         print("[AUTOSCAN] Eye detected, launching pipeline...")
 
@@ -486,7 +486,7 @@ def _autoscan_thread():
         time.sleep(0.1)
 
         try:
-            # Sauvegarder la frame courante
+            # Save the current frame
             tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
             cv2.imwrite(tmp.name, frame)
             tmp.close()
@@ -494,7 +494,7 @@ def _autoscan_thread():
             try:
                 template, iris_hash = process_image(tmp.name)
 
-                # Stocker le template pour register/transaction sans re-capture
+                # Store template for register/transaction without re-capture
                 global _last_template, _last_iris_hash
                 _last_template = template
                 _last_iris_hash = iris_hash
@@ -524,8 +524,8 @@ def _autoscan_thread():
                 if "EyeOrientationEstimationError" in msg or "VectorizationError" in msg or "Geometry" in msg:
                     print("[AUTOSCAN] Iris poorly framed, retrying...")
                 else:
-                    print(f"[AUTOSCAN] Erreur pipeline: {msg}")
-                # On ne signale pas l'erreur, on reessaie
+                    print(f"[AUTOSCAN] Pipeline error: {msg}")
+                # Don't report the error, just retry
                 time.sleep(1)
                 continue
             finally:
@@ -534,16 +534,16 @@ def _autoscan_thread():
         finally:
             _scanning = False
 
-        # Apres un scan reussi, attendre un peu avant de rescanner
+        # After a successful scan, wait before rescanning
         time.sleep(3)
 
 
 @app.route("/api/autoscan", methods=["GET"])
 def api_autoscan():
-    """SSE endpoint — active l'auto-scan et envoie le resultat quand pret.
+    """SSE endpoint — activates auto-scan and sends the result when ready.
 
-    L'extension se connecte ici avec EventSource.
-    Le backend detecte l'oeil automatiquement et renvoie le resultat.
+    The extension connects here with EventSource.
+    The backend detects the eye automatically and returns the result.
     """
     global _autoscan_active, _autoscan_result
 
@@ -553,10 +553,10 @@ def api_autoscan():
         _autoscan_result = None
         _autoscan_event.clear()
 
-        # Envoyer un heartbeat pour confirmer la connexion
+        # Send a heartbeat to confirm the connection
         yield f"data: {json.dumps({'status': 'scanning'})}\n\n"
 
-        # Envoyer des heartbeats pendant qu'on attend
+        # Send heartbeats while waiting
         while True:
             got_result = _autoscan_event.wait(timeout=2.0)
             if got_result and _autoscan_result is not None:
@@ -566,7 +566,7 @@ def api_autoscan():
                 _autoscan_active = False
                 yield f"data: {json.dumps(result)}\n\n"
                 return
-            # Heartbeat pour garder la connexion vivante
+            # Heartbeat to keep the connection alive
             yield f"data: {json.dumps({'status': 'scanning'})}\n\n"
 
     return Response(
@@ -581,14 +581,14 @@ def api_autoscan():
 
 @app.route("/api/autoscan/stop", methods=["POST"])
 def api_autoscan_stop():
-    """Arrete l'auto-scan."""
+    """Stop the auto-scan."""
     global _autoscan_active
     _autoscan_active = False
     return jsonify({"status": "stopped"})
 
 
 # ======================================================================
-#  API directe (upload image)
+#  Direct API (image upload)
 # ======================================================================
 
 @app.route("/enroll", methods=["POST"])
@@ -722,7 +722,7 @@ if __name__ == "__main__":
     print()
     init_db()
 
-    # Lancer le stream Pi + thread de lecture
+    # Start the Pi stream + reader thread
     print("  Connecting to Pi...")
     try:
         _ensure_pi_stream()
@@ -736,16 +736,16 @@ if __name__ == "__main__":
         print("  Stream will start on first scan.")
     print(f"  DB: {DB_PATH}")
     print(f"  Pi: {PI_USER}@{PI_IP}:{PI_STREAM_PORT}")
-    print(f"  Seuil match: {MATCH_THRESHOLD}")
+    print(f"  Match threshold: {MATCH_THRESHOLD}")
     print()
-    print("  Endpoints extension:")
-    print("    POST /api/scan      — scanner iris via Pi")
-    print("    POST /api/register  — creer un compte")
-    print("    GET  /api/accounts  — lister les comptes")
+    print("  Extension endpoints:")
+    print("    POST /api/scan      — scan iris via Pi")
+    print("    POST /api/register  — create an account")
+    print("    GET  /api/accounts  — list accounts")
     print()
-    print("  Endpoints directs:")
-    print("    POST /enroll    — inscrire (upload image)")
-    print("    POST /identify  — identifier (upload image)")
+    print("  Direct endpoints:")
+    print("    POST /enroll    — enroll (upload image)")
+    print("    POST /identify  — identify (upload image)")
     print("    GET  /health    — status")
     print()
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

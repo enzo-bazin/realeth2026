@@ -7,7 +7,7 @@ import SendScreen from './screens/SendScreen';
 export default function App() {
   const { screen, loading } = useWallet();
 
-  if (loading) return <div className="app-container"><p>Chargement...</p></div>;
+  if (loading) return <div className="app-container"><p>Loading...</p></div>;
 
   return (
     <div className="app-container">
