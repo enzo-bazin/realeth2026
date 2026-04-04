@@ -88,9 +88,14 @@ export default function DashboardScreen() {
         )}
       </div>
 
-      <button className="btn-primary" onClick={() => setScreen('send')}>
-        Send ETH
-      </button>
+      <div className="btn-group">
+        <button className="btn-primary" onClick={() => setScreen('send')}>
+          Send (public)
+        </button>
+        <button className="btn-private" onClick={() => setScreen('send-private')}>
+          Send (private)
+        </button>
+      </div>
 
       <button className="btn-danger" onClick={logout}>
         Disconnect

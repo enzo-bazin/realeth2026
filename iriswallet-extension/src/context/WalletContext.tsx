@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
-export type Screen = 'scan' | 'register' | 'dashboard' | 'send';
+export type Screen = 'scan' | 'register' | 'dashboard' | 'send' | 'send-private';
 
 export interface WalletData {
   walletName: string;

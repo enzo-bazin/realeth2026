@@ -3,6 +3,7 @@ import ScanScreen from './screens/ScanScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import SendScreen from './screens/SendScreen';
+import PrivateSendScreen from './screens/PrivateSendScreen';
 
 export default function App() {
   const { screen, loading } = useWallet();
@@ -15,6 +16,7 @@ export default function App() {
       {screen === 'register' && <RegisterScreen />}
       {screen === 'dashboard' && <DashboardScreen />}
       {screen === 'send' && <SendScreen />}
+      {screen === 'send-private' && <PrivateSendScreen />}
     </div>
   );
 }

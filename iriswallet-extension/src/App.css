@@ -140,6 +140,90 @@ body {
   font-size: 18px;
 }
 
+.btn-private {
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #022c22;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-private:hover {
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-private:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-group {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.btn-group .btn-primary,
+.btn-group .btn-private {
+  flex: 1;
+  font-size: 13px;
+  padding: 12px 8px;
+}
+
+.unlink-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 8px;
+  width: 100%;
+}
+
+.unlink-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.unlink-info .info-value.mono.small {
+  font-size: 11px;
+}
+
+.unlink-info .info-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.unlink-balance-has {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.btn-refresh {
+  background: none;
+  border: none;
+  color: #00d4ff;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: transform 0.3s;
+}
+
+.btn-refresh:hover {
+  transform: rotate(180deg);
+}
+
 .btn-danger {
   width: 100%;
   padding: 12px 20px;
