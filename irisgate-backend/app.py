@@ -720,6 +720,8 @@ if __name__ == "__main__":
         _ensure_pi_stream()
         t = threading.Thread(target=_stream_reader_thread, daemon=True)
         t.start()
+        t2 = threading.Thread(target=_autoscan_thread, daemon=True)
+        t2.start()
         print("  Stream Pi connecte !")
     except Exception as e:
         print(f"  [WARN] Pi non disponible: {e}")

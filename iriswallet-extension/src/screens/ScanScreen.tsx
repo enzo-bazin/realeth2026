@@ -1,36 +1,54 @@
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useWallet } from '../context/WalletContext';
-import { scanIris } from '../services/api';
 
 const API_URL = 'http://localhost:5000';
 
 export default function ScanScreen() {
   const { setScreen, setWallet, setCurrentHash } = useWallet();
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('Recherche de votre oeil...');
   const [error, setError] = useState('');
+  const eventSourceRef = useRef<EventSource | null>(null);
 
-  const handleScan = async () => {
-    setLoading(true);
-    setError('');
-    setStatus('Scan en cours...');
-    try {
-      const result = await scanIris();
+  useEffect(() => {
+    // Connecter l'auto-scan SSE au montage
+    const es = new EventSource(`${API_URL}/api/autoscan`);
+    eventSourceRef.current = es;
 
-      if (result.found) {
-        setWallet(result.wallet);
-        setScreen('dashboard');
-      } else {
-        setCurrentHash(result.irisHash);
-        setScreen('register');
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.status === 'scanning') {
+          setStatus('Recherche de votre oeil...');
+          return;
+        }
+
+        // Resultat recu — fermer la connexion
+        es.close();
+
+        if (data.status === 'found') {
+          setWallet(data.wallet);
+          setScreen('dashboard');
+        } else if (data.status === 'unknown') {
+          setCurrentHash(data.irisHash);
+          setScreen('register');
+        }
+      } catch {
+        // ignore parse errors
       }
-    } catch (e: any) {
-      setError(e.message || 'Impossible de contacter le serveur');
-    } finally {
-      setLoading(false);
-      setStatus('');
-    }
-  };
+    };
+
+    es.onerror = () => {
+      setError('Connexion au serveur perdue');
+      es.close();
+    };
+
+    return () => {
+      es.close();
+      // Notifier le backend d'arreter
+      fetch(`${API_URL}/api/autoscan/stop`, { method: 'POST' }).catch(() => {});
+    };
+  }, [setScreen, setWallet, setCurrentHash]);
 
   return (
     <div className="screen">
@@ -50,25 +68,18 @@ export default function ScanScreen() {
         </div>
       </div>
 
-      <p className="scan-hint">
-        Placez votre oeil devant la camera
-      </p>
+      <div className="scan-status">
+        <span className="scan-status-dot" />
+        <span>{status}</span>
+      </div>
 
-      <button className="btn-primary" onClick={handleScan} disabled={loading}>
-        {loading ? (
-          <>
-            <span className="spinner" />
-            <span className="loading-text">{status}</span>
-          </>
-        ) : (
-          <>
-            <span className="btn-icon">👁</span>
-            Scanner mon iris
-          </>
-        )}
-      </button>
-
-      {error && <p className="error-msg">{error}</p>}
+      {error ? (
+        <p className="error-msg">{error}</p>
+      ) : (
+        <p className="scan-hint">
+          Placez votre oeil devant la camera, le scan est automatique
+        </p>
+      )}
     </div>
   );
 }
