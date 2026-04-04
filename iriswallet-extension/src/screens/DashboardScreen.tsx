@@ -40,7 +40,7 @@ export default function DashboardScreen() {
       <div className="logo-section">
         <h1 className="title">{wallet.walletName}</h1>
         <p className="subtitle">
-          {wallet.onChain ? 'On-chain wallet' : 'Off-chain wallet'}
+          {wallet.isMultisig ? 'Multisig wallet (Iris + Ledger)' : wallet.onChain ? 'On-chain wallet' : 'Off-chain wallet'}
           {wallet.onChain && <span className="chain-badge">Sepolia</span>}
         </p>
       </div>

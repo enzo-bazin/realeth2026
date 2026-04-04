@@ -147,29 +147,32 @@ def init_db():
             iris_code_version TEXT,
             eye_side TEXT DEFAULT 'left',
             private_key TEXT DEFAULT '',
+            iris_address TEXT DEFAULT '',
+            ledger_address TEXT DEFAULT '',
             balance REAL NOT NULL DEFAULT 0.0,
             created_at REAL NOT NULL
         )
     """)
-    # Add private_key column if missing (existing DBs)
-    try:
-        conn.execute("ALTER TABLE accounts ADD COLUMN private_key TEXT DEFAULT ''")
-    except sqlite3.OperationalError:
-        pass
+    # Add columns if missing (existing DBs)
+    for col, default in [("private_key", "''"), ("iris_address", "''"), ("ledger_address", "''")]:
+        try:
+            conn.execute(f"ALTER TABLE accounts ADD COLUMN {col} TEXT DEFAULT {default}")
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     conn.close()
 
 
-def save_account(address, wallet_name, template, eye_side="left", private_key=""):
+def save_account(address, wallet_name, template, eye_side="left", private_key="", iris_address="", ledger_address=""):
     iris_codes_bytes = _serialize_codes(template.iris_codes)
     mask_codes_bytes = _serialize_codes(template.mask_codes)
     version = getattr(template, 'iris_code_version', None)
 
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
-        "INSERT INTO accounts (address, wallet_name, iris_codes, mask_codes, iris_code_version, eye_side, private_key, balance, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (address, wallet_name, iris_codes_bytes, mask_codes_bytes, version, eye_side, private_key, 0.0, time.time())
+        "INSERT INTO accounts (address, wallet_name, iris_codes, mask_codes, iris_code_version, eye_side, private_key, iris_address, ledger_address, balance, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (address, wallet_name, iris_codes_bytes, mask_codes_bytes, version, eye_side, private_key, iris_address, ledger_address, 0.0, time.time())
     )
     conn.commit()
     conn.close()
@@ -178,7 +181,7 @@ def save_account(address, wallet_name, template, eye_side="left", private_key=""
 def get_account_info(address):
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute(
-        "SELECT address, wallet_name, balance, created_at, private_key FROM accounts WHERE address = ?",
+        "SELECT address, wallet_name, balance, created_at, private_key, iris_address, ledger_address FROM accounts WHERE address = ?",
         (address,)
     ).fetchone()
     conn.close()
@@ -192,6 +195,10 @@ def get_account_info(address):
     }
     if row[4]:
         info["privateKey"] = row[4]
+    if row[5]:
+        info["irisAddress"] = row[5]
+    if row[6]:
+        info["ledgerAddress"] = row[6]
     return info
 
 
@@ -365,7 +372,9 @@ def api_register():
         # Create the account — use the address provided by the extension or generate one
         address = data.get("walletAddress") or _generate_address()
         private_key = data.get("privateKey", "")
-        save_account(address, wallet_name, template, private_key=private_key)
+        iris_address = data.get("irisAddress", "")
+        ledger_address = data.get("ledgerAddress", "")
+        save_account(address, wallet_name, template, private_key=private_key, iris_address=iris_address, ledger_address=ledger_address)
 
         wallet_info = get_account_info(address)
         wallet_info["irisHash"] = iris_hash
