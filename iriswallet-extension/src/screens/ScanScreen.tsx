@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useWallet } from '../context/WalletContext';
+import { isIrisRegistered, getOnChainWallet, getBalance } from '../services/blockchain';
+import { formatEther } from 'viem';
 
 const API_URL = 'http://localhost:5000';
 
@@ -10,13 +12,61 @@ export default function ScanScreen() {
   const [unknownHash, setUnknownHash] = useState('');
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  const checkOnChain = async (irisHash: string, walletFromBackend: any) => {
+    try {
+      setStatus('Verification on-chain...');
+      const registered = await isIrisRegistered(irisHash);
+
+      if (registered) {
+        const onChainData = await getOnChainWallet(irisHash);
+        if (onChainData && onChainData.active) {
+          const bal = await getBalance(onChainData.wallet);
+          setWallet({
+            irisHash,
+            walletName: walletFromBackend?.walletName || 'IrisWallet',
+            walletAddress: onChainData.wallet,
+            balance: formatEther(bal),
+            createdAt: new Date(Number(onChainData.registeredAt) * 1000).toISOString(),
+            onChain: true,
+          });
+          setScreen('dashboard');
+          return;
+        }
+      }
+
+      // On-chain not found — check if backend knows it
+      if (walletFromBackend) {
+        setWallet({
+          ...walletFromBackend,
+          onChain: false,
+        });
+        setScreen('dashboard');
+        return;
+      }
+
+      // Not found anywhere
+      setCurrentHash(irisHash);
+      setUnknownHash(irisHash);
+      setStatus('Iris non reconnu');
+    } catch (e: any) {
+      console.warn('On-chain check failed, falling back to backend:', e.message);
+      // Fallback: use backend data if available
+      if (walletFromBackend) {
+        setWallet({ ...walletFromBackend, onChain: false });
+        setScreen('dashboard');
+      } else {
+        setCurrentHash(irisHash);
+        setUnknownHash(irisHash);
+        setStatus('Iris non reconnu');
+      }
+    }
+  };
+
   const startAutoScan = () => {
-    // Reset state
     setError('');
     setUnknownHash('');
     setStatus('Recherche de votre oeil...');
 
-    // Fermer l'ancienne connexion si elle existe
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       fetch(`${API_URL}/api/autoscan/stop`, { method: 'POST' }).catch(() => {});
@@ -38,8 +88,13 @@ export default function ScanScreen() {
         eventSourceRef.current = null;
 
         if (data.status === 'found') {
-          setWallet(data.wallet);
-          setScreen('dashboard');
+          const irisHash = data.wallet?.irisHash || data.irisHash;
+          if (irisHash) {
+            checkOnChain(irisHash, data.wallet);
+          } else {
+            setWallet(data.wallet);
+            setScreen('dashboard');
+          }
         } else if (data.status === 'unknown') {
           setCurrentHash(data.irisHash);
           setUnknownHash(data.irisHash);
@@ -76,7 +131,7 @@ export default function ScanScreen() {
     <div className="screen">
       <div className="logo-section compact">
         <h1 className="title">IrisWallet</h1>
-        <p className="subtitle">Authentification biometrique</p>
+        <p className="subtitle">Authentification biometrique on-chain</p>
       </div>
 
       <div className="camera-container">

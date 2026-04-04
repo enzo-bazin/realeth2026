@@ -1,13 +1,7 @@
 [
   {
     "type": "constructor",
-    "inputs": [
-      {
-        "name": "_worldIdVerifier",
-        "type": "address",
-        "internalType": "contract WorldIDVerifier"
-      }
-    ],
+    "inputs": [],
     "stateMutability": "nonpayable"
   },
   {
@@ -15,9 +9,9 @@
     "name": "deactivateWallet",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [],
@@ -28,9 +22,9 @@
     "name": "getWallet",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
@@ -64,9 +58,9 @@
     "name": "isActive",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
@@ -83,9 +77,9 @@
     "name": "isRegistered",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
@@ -115,9 +109,9 @@
     "name": "reactivateWallet",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [],
@@ -133,19 +127,9 @@
         "internalType": "address"
       },
       {
-        "name": "root",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "proof",
-        "type": "uint256[8]",
-        "internalType": "uint256[8]"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [],
@@ -166,12 +150,31 @@
   },
   {
     "type": "function",
+    "name": "walletToIrisHash",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "wallets",
     "inputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
@@ -194,27 +197,14 @@
     "stateMutability": "view"
   },
   {
-    "type": "function",
-    "name": "worldIdVerifier",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract WorldIDVerifier"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
     "type": "event",
     "name": "WalletDeactivated",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
+        "name": "irisHash",
+        "type": "bytes32",
         "indexed": true,
-        "internalType": "uint256"
+        "internalType": "bytes32"
       },
       {
         "name": "wallet",
@@ -230,10 +220,10 @@
     "name": "WalletReactivated",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
+        "name": "irisHash",
+        "type": "bytes32",
         "indexed": true,
-        "internalType": "uint256"
+        "internalType": "bytes32"
       },
       {
         "name": "wallet",
@@ -249,10 +239,10 @@
     "name": "WalletRegistered",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
+        "name": "irisHash",
+        "type": "bytes32",
         "indexed": true,
-        "internalType": "uint256"
+        "internalType": "bytes32"
       },
       {
         "name": "wallet",
@@ -268,9 +258,9 @@
     "name": "AlreadyActive",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ]
   },
@@ -279,9 +269,9 @@
     "name": "AlreadyDeactivated",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ]
   },
@@ -290,9 +280,9 @@
     "name": "AlreadyRegistered",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ]
   },
@@ -301,9 +291,9 @@
     "name": "NotRegistered",
     "inputs": [
       {
-        "name": "nullifierHash",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "irisHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ]
   },
@@ -314,7 +304,13 @@
   },
   {
     "type": "error",
-    "name": "OnlyVerifier",
-    "inputs": []
+    "name": "WalletAlreadyBound",
+    "inputs": [
+      {
+        "name": "wallet",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   }
 ]

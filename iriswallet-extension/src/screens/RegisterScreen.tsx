@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useWallet } from '../context/WalletContext';
 import { register } from '../services/api';
+import { registerOnChain, getBalance } from '../services/blockchain';
+import { formatEther } from 'viem';
 
 export default function RegisterScreen() {
-  const { setWallet, setScreen } = useWallet();
+  const { currentHash, setWallet, setScreen } = useWallet();
   const [walletName, setWalletName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('');
   const [error, setError] = useState('');
 
   const handleRegister = async () => {
@@ -16,14 +19,46 @@ export default function RegisterScreen() {
 
     setLoading(true);
     setError('');
+
     try {
-      const result = await register(walletName.trim());
-      setWallet(result.wallet);
+      // 1. Register in backend (stores iris template)
+      setStatus('Enregistrement iris...');
+      const backendResult = await register(walletName.trim());
+
+      // 2. Register on-chain
+      setStatus('Enregistrement on-chain...');
+      const { walletAddress, txHash } = await registerOnChain(currentHash);
+
+      // 3. Get balance
+      const bal = await getBalance(walletAddress);
+
+      setWallet({
+        irisHash: currentHash,
+        walletName: walletName.trim(),
+        walletAddress,
+        balance: formatEther(bal),
+        createdAt: new Date().toISOString(),
+        onChain: true,
+        txHash,
+      });
       setScreen('dashboard');
     } catch (e: any) {
-      setError(e.message || 'Erreur lors de la creation du wallet');
+      // If on-chain fails, fallback to backend-only
+      if (e.message?.includes('insufficient funds') || e.message?.includes('gas')) {
+        setError('Pas assez de ETH sur World Chain Sepolia pour le gas. Enregistrement off-chain uniquement.');
+        try {
+          const backendResult = await register(walletName.trim());
+          setWallet({ ...backendResult.wallet, onChain: false });
+          setScreen('dashboard');
+        } catch {
+          setError('Erreur lors de la creation du wallet');
+        }
+      } else {
+        setError(e.message || 'Erreur lors de la creation du wallet');
+      }
     } finally {
       setLoading(false);
+      setStatus('');
     }
   };
 
@@ -31,7 +66,7 @@ export default function RegisterScreen() {
     <div className="screen">
       <div className="logo-section">
         <h1 className="title">Nouveau Wallet</h1>
-        <p className="subtitle">Iris non reconnu — gardez votre oeil devant la camera</p>
+        <p className="subtitle">Iris detecte — creation du wallet on-chain</p>
       </div>
 
       <div className="form-group">
@@ -47,8 +82,21 @@ export default function RegisterScreen() {
         />
       </div>
 
+      {currentHash && (
+        <p className="iris-hash-display">
+          Iris: {currentHash.slice(0, 8)}...{currentHash.slice(-4)}
+        </p>
+      )}
+
       <button className="btn-primary" onClick={handleRegister} disabled={loading}>
-        {loading ? <span className="spinner" /> : 'Creer mon wallet'}
+        {loading ? (
+          <>
+            <span className="spinner" />
+            <span className="loading-text">{status}</span>
+          </>
+        ) : (
+          'Creer mon wallet on-chain'
+        )}
       </button>
 
       {error && <p className="error-msg">{error}</p>}
