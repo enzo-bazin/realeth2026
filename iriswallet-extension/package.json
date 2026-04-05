@@ -10,6 +10,7 @@
   "dependencies": {
     "@ledgerhq/hw-app-eth": "^7.6.2",
     "@ledgerhq/hw-transport-webhid": "^6.34.0",
+    "@ledgerhq/hw-transport-webusb": "^6.33.0",
     "buffer": "^6.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

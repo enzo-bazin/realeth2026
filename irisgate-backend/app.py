@@ -712,6 +712,31 @@ def remove_account(address):
     return jsonify({"error": "Account not found"}), 404
 
 
+# --- Ledger Bridge relay ---
+_ledger_result = None
+
+@app.route("/api/ledger-result", methods=["POST"])
+def post_ledger_result():
+    global _ledger_result
+    _ledger_result = request.get_json()
+    return jsonify({"status": "ok"})
+
+@app.route("/api/ledger-result", methods=["GET"])
+def get_ledger_result():
+    global _ledger_result
+    if _ledger_result is None:
+        return jsonify({"pending": True})
+    result = _ledger_result
+    _ledger_result = None
+    return jsonify(result)
+
+@app.route("/api/ledger-result", methods=["DELETE"])
+def clear_ledger_result():
+    global _ledger_result
+    _ledger_result = None
+    return jsonify({"status": "cleared"})
+
+
 @app.route("/health", methods=["GET"])
 def health():
     conn = sqlite3.connect(DB_PATH)

@@ -28,6 +28,14 @@ const irisRegistryAbi = [
 
 const irisMultisigAbi = [
   {
+    type: 'constructor',
+    inputs: [
+      { name: '_irisOwner', type: 'address' },
+      { name: '_ledgerOwner', type: 'address' },
+    ],
+    stateMutability: 'nonpayable',
+  },
+  {
     type: 'function',
     name: 'execute',
     inputs: [
@@ -149,15 +157,9 @@ export async function deployMultisig(irisAddress: Address, ledgerAddress: Addres
     transport: http(),
   });
 
-  const encodedArgs = encodePacked(
-    ['address', 'address'],
-    [irisAddress, ledgerAddress],
-  );
-  const bytecode = (IRIS_MULTISIG_BYTECODE + encodedArgs.slice(2)) as Hex;
-
   const txHash = await walletClient.deployContract({
     abi: irisMultisigAbi,
-    bytecode,
+    bytecode: IRIS_MULTISIG_BYTECODE,
     args: [irisAddress, ledgerAddress],
   });
 

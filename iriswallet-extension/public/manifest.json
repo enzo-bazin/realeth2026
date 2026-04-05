@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "IrisWallet",
   "version": "1.0.0",
-  "description": "Wallet biométrique basé sur la reconnaissance d'iris",
+  "description": "Biometric wallet based on iris recognition",
   "action": {
     "default_popup": "index.html",
     "default_icon": {
@@ -16,7 +16,7 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": [],
+  "permissions": ["tabs"],
   "host_permissions": [
     "http://localhost:5000/*"
   ]

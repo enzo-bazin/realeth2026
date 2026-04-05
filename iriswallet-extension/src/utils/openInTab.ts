@@ -1,18 +1,4 @@
 /**
- * Opens the extension in a full browser tab where WebHID is available.
- * Falls back to window.open for non-extension contexts.
- */
-export function openInTab() {
-  if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
-    // Close the popup and open in a full tab
-    chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
-    window.close();
-  } else {
-    // Already in a tab or dev mode — no-op
-  }
-}
-
-/**
  * Returns true if WebHID is available in the current context.
  */
 export function isWebHIDAvailable(): boolean {
@@ -20,10 +6,45 @@ export function isWebHIDAvailable(): boolean {
 }
 
 /**
- * Returns true if we're running inside an extension popup (small window).
+ * Returns true if running in an extension popup (not a full tab).
  */
-export function isExtensionPopup(): boolean {
-  if (typeof chrome === 'undefined' || !chrome.extension) return false;
-  const views = chrome.extension.getViews?.({ type: 'popup' });
-  return views ? views.includes(window) : window.innerWidth < 500;
+export function isPopup(): boolean {
+  try {
+    return typeof chrome !== 'undefined'
+      && !!chrome.runtime?.id
+      && window.innerWidth < 800;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Opens the extension in a full browser tab with optional URL params to restore state.
+ * The popup closes automatically.
+ */
+export function openInTab(params?: Record<string, string>) {
+  if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+    const url = new URL(chrome.runtime.getURL('index.html'));
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        url.searchParams.set(key, value);
+      }
+    }
+    chrome.tabs.create({ url: url.toString() });
+    window.close();
+  }
+}
+
+/**
+ * Reads URL params (used after openInTab redirects to a full tab).
+ */
+export function getTabParams(): Record<string, string> {
+  const params: Record<string, string> = {};
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.forEach((value, key) => {
+      params[key] = value;
+    });
+  } catch {}
+  return params;
 }

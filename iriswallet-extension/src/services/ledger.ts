@@ -1,32 +1,60 @@
 import type { Hex } from 'viem';
 
-const DERIVATION_PATH = "44'/60'/0'/0/0";
+const LEDGER_BRIDGE_URL = 'http://localhost:5173/ledger.html';
+const API_URL = 'http://localhost:5000';
+const REGISTER_STATE_KEY = 'iriswallet_register_state';
+const SEND_STATE_KEY = 'iriswallet_send_state';
 
-async function connectLedger() {
-  const TransportWebHID = (await import('@ledgerhq/hw-transport-webhid')).default;
-  const Eth = (await import('@ledgerhq/hw-app-eth')).default;
-  const transport = await TransportWebHID.create();
-  return new Eth(transport);
+/**
+ * Open the Ledger bridge and save register state.
+ */
+export function requestLedgerAddress(walletName: string) {
+  localStorage.setItem(REGISTER_STATE_KEY, JSON.stringify({ walletName }));
+  clearBackendResult();
+
+  const url = new URL(LEDGER_BRIDGE_URL);
+  url.searchParams.set('ledgerAction', 'getAddress');
+  window.open(url.toString(), '_blank');
 }
 
-export async function getLedgerAddress(): Promise<string> {
-  const eth = await connectLedger();
+/**
+ * Open the Ledger bridge for signing and save send state.
+ */
+export function requestLedgerSign(messageHash: Hex, sendState: { to: string; amount: string; irisSig: string }) {
+  localStorage.setItem(SEND_STATE_KEY, JSON.stringify(sendState));
+  clearBackendResult();
+
+  const url = new URL(LEDGER_BRIDGE_URL);
+  url.searchParams.set('ledgerAction', 'signMessage');
+  url.searchParams.set('hash', messageHash.slice(2));
+  window.open(url.toString(), '_blank');
+}
+
+/**
+ * Poll the backend for Ledger result.
+ */
+export async function pollLedgerResult(): Promise<{ address?: string; signature?: string; error?: string } | null> {
   try {
-    const result = await eth.getAddress(DERIVATION_PATH);
-    return result.address;
-  } finally {
-    await eth.transport.close();
+    const res = await fetch(`${API_URL}/api/ledger-result`);
+    const data = await res.json();
+    if (data.pending) return null;
+    if (data.success) return { address: data.address, signature: data.signature };
+    if (data.error) return { error: data.error };
+    return null;
+  } catch {
+    return null;
   }
 }
 
-export async function signWithLedger(messageHash: Hex): Promise<Hex> {
-  const eth = await connectLedger();
-  try {
-    const hash = messageHash.slice(2);
-    const sig = await eth.signPersonalMessage(DERIVATION_PATH, hash);
-    const v = (typeof sig.v === 'number' ? sig.v : parseInt(sig.v as string, 16));
-    return `0x${sig.r}${sig.s}${v.toString(16).padStart(2, '0')}` as Hex;
-  } finally {
-    await eth.transport.close();
-  }
+function clearBackendResult() {
+  fetch(`${API_URL}/api/ledger-result`, { method: 'DELETE' }).catch(() => {});
 }
+
+export function clearLedgerPending() {
+  localStorage.removeItem(REGISTER_STATE_KEY);
+  localStorage.removeItem(SEND_STATE_KEY);
+  clearBackendResult();
+}
+
+// Keep for backward compat — not used anymore
+export function checkUrlForLedgerResult() { return null; }
