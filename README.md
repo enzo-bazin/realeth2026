@@ -1,30 +1,30 @@
 # IrisWallet
 
-Portefeuille blockchain authentifie par reconnaissance d'iris. Le systeme combine la biometrie de l'iris (algorithme open-iris de Worldcoin), des smart contracts Ethereum (Sepolia), une extension navigateur et un backend de traitement d'image.
+Blockchain wallet authenticated by iris recognition. The system combines iris biometrics (Worldcoin's open-iris algorithm), Ethereum smart contracts (Sepolia), a browser extension and an image processing backend.
 
 ## Architecture
 
 ```
-iriswallet-extension/   Extension Chrome (React + TypeScript + Vite)
-irisgate-backend/       API principale Flask (Python) - port 5000
-hardware/               API capture iris (Python/Flask) - port 5001
-iris-recognition/       Module de reconnaissance d'iris (Python + open-iris)
-contracts/              Smart contracts Solidity (Foundry)
-website/                Site vitrine Next.js - port 3000
-fetch_picture/          Scripts de capture photo Raspberry Pi
+iriswallet-extension/   Chrome extension (React + TypeScript + Vite)
+irisgate-backend/       Main Flask API backend (Python) - port 5000
+hardware/               Iris capture API (Python/Flask) - port 5001
+iris-recognition/       Iris recognition module (Python + open-iris)
+contracts/              Solidity smart contracts (Foundry)
+website/                Landing page (Next.js) - port 3000
+fetch_picture/          Raspberry Pi photo capture scripts
 ```
 
-## Pre-requis
+## Prerequisites
 
 - **Python 3.10+**
-- **Node.js 18+** et npm
-- **Foundry** (forge, cast, anvil) pour les smart contracts
-- **Raspberry Pi 4** avec module camera (ou webcam USB en mode local)
-- **Ledger** (optionnel, pour le multisig)
+- **Node.js 18+** and npm
+- **Foundry** (forge, cast, anvil) for smart contracts
+- **Raspberry Pi 4** with camera module (or USB webcam in local mode)
+- **Ledger** (optional, for multisig)
 
 ## Installation
 
-### 1. Module de reconnaissance d'iris
+### 1. Iris recognition module
 
 ```bash
 cd iris-recognition
@@ -33,7 +33,7 @@ source venv/bin/activate
 pip install "setuptools>=69"
 pip install "pydantic>=1.10,<2"
 
-# Installer open-iris (Worldcoin)
+# Install open-iris (Worldcoin)
 git clone --depth 1 https://github.com/worldcoin/open-iris.git
 cd open-iris
 sed -i 's/==/>=/' requirements/base.txt requirements/server.txt
@@ -43,14 +43,14 @@ cd ..
 pip install -r requirements.txt
 ```
 
-### 2. Backend principal (irisgate-backend)
+### 2. Main backend (irisgate-backend)
 
 ```bash
 cd irisgate-backend
 pip install -r requirements.txt
 ```
 
-### 3. API Hardware (optionnel)
+### 3. Hardware API (optional)
 
 ```bash
 cd hardware
@@ -59,14 +59,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Extension navigateur
+### 4. Browser extension
 
 ```bash
 cd iriswallet-extension
 npm install
 ```
 
-### 5. Site web
+### 5. Website
 
 ```bash
 cd website
@@ -79,88 +79,88 @@ npm install
 cd contracts
 forge install
 cp .env.example .env
-# Remplir les variables dans .env (voir section Configuration)
+# Fill in the variables in .env (see Configuration section)
 ```
 
 ## Configuration
 
-### Variables d'environnement
+### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `PI_USER` | `epitech` | Utilisateur SSH du Raspberry Pi |
-| `PI_IP` | `10.105.174.149` | Adresse IP du Raspberry Pi |
-| `PI_STREAM_PORT` | `8888` | Port du flux MJPEG |
-| `PI_BURST_COUNT` | `5` | Nombre de photos par capture |
-| `CAPTURE_MODE` | `remote` | `remote` (Pi) ou `local` (webcam USB) |
-| `IRIS_CAMERA` | `0` | Index de la camera USB (mode local) |
-| `IRIS_AES_KEY` | - | Cle AES-256 en base64 (chiffrement des templates) |
-| `SEPOLIA_RPC_URL` | - | URL RPC Ethereum Sepolia |
-| `ETHERSCAN_API_KEY` | - | Cle API Etherscan |
-| `DEPLOYER_PRIVATE_KEY` | - | Cle privee pour le deploiement des contrats |
+| `PI_USER` | `epitech` | Raspberry Pi SSH username |
+| `PI_IP` | `10.105.174.149` | Raspberry Pi IP address |
+| `PI_STREAM_PORT` | `8888` | MJPEG stream port |
+| `PI_BURST_COUNT` | `5` | Number of photos per capture burst |
+| `CAPTURE_MODE` | `remote` | `remote` (Pi) or `local` (USB webcam) |
+| `IRIS_CAMERA` | `0` | USB camera index (local mode) |
+| `IRIS_AES_KEY` | - | Base64-encoded AES-256 key (template encryption) |
+| `SEPOLIA_RPC_URL` | - | Ethereum Sepolia RPC URL |
+| `ETHERSCAN_API_KEY` | - | Etherscan API key |
+| `DEPLOYER_PRIVATE_KEY` | - | Private key for contract deployment |
 
-### Configuration Raspberry Pi
+### Raspberry Pi setup
 
-Le Pi doit etre accessible en SSH sans mot de passe :
+The Pi must be accessible via passwordless SSH:
 
 ```bash
 ssh-keygen
 ssh-copy-id epitech@10.105.174.149
 ```
 
-## Lancement
+## Running
 
-Ouvrir un terminal par service :
+Open one terminal per service:
 
-### Terminal 1 - Backend principal
+### Terminal 1 - Main backend
 
 ```bash
 cd irisgate-backend
 python app.py
-# Ecoute sur http://localhost:5000
+# Listening on http://localhost:5000
 ```
 
-### Terminal 2 - API Hardware (optionnel)
+### Terminal 2 - Hardware API (optional)
 
 ```bash
 cd hardware
 source venv/bin/activate
 python app.py
-# Ecoute sur http://localhost:5001
+# Listening on http://localhost:5001
 ```
 
-### Terminal 3 - Site web (optionnel)
+### Terminal 3 - Website (optional)
 
 ```bash
 cd website
 npm run dev
-# Ecoute sur http://localhost:3000
+# Listening on http://localhost:3000
 ```
 
-### Terminal 4 - Extension (developpement)
+### Terminal 4 - Extension (development)
 
 ```bash
 cd iriswallet-extension
 npm run dev
-# Vite dev server sur http://localhost:5173
+# Vite dev server on http://localhost:5173
 ```
 
-### Charger l'extension dans Chrome
+### Loading the extension in Chrome
 
-1. Compiler l'extension :
+1. Build the extension:
    ```bash
    cd iriswallet-extension
    npm run build
    ```
-2. Ouvrir Chrome et aller sur `chrome://extensions/`
-3. Activer le **Mode developpeur** (en haut a droite)
-4. Cliquer sur **Charger l'extension non empaquetee**
-5. Selectionner le dossier `iriswallet-extension/dist/`
-6. L'icone IrisWallet apparait dans la barre d'extensions
+2. Open Chrome and go to `chrome://extensions/`
+3. Enable **Developer mode** (top right)
+4. Click **Load unpacked**
+5. Select the `iriswallet-extension/dist/` folder
+6. The IrisWallet icon appears in the extensions bar
 
 ## Smart Contracts
 
-### Build et tests
+### Build and test
 
 ```bash
 cd contracts
@@ -168,7 +168,7 @@ forge build
 forge test -v
 ```
 
-### Deploiement local (Anvil)
+### Local deployment (Anvil)
 
 ```bash
 # Terminal A
@@ -180,7 +180,7 @@ source .env
 forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 ```
 
-### Deploiement sur Sepolia
+### Sepolia deployment
 
 ```bash
 cd contracts
@@ -188,37 +188,37 @@ source .env
 forge script script/Deploy.s.sol --rpc-url $SEPOLIA_RPC_URL --broadcast
 ```
 
-### Contrats deployes (Sepolia)
+### Deployed contracts (Sepolia)
 
-| Contrat | Adresse |
+| Contract | Address |
 |---|---|
 | IrisRegistry | `0xc48326f0031DeCbd53CF97835382C638E83f2785` |
 | IrisVerifier | `0x8a5F9475e329375fbE17a2766c43c9EFd165C645` |
 
-## Utilisation
+## Usage
 
-### Flux principal
+### Main flow
 
-1. **Ouvrir l'extension** IrisWallet dans Chrome
-2. **Scanner l'iris** - l'extension appelle le backend qui capture une photo via le Raspberry Pi et effectue la reconnaissance
-3. **Iris reconnu** -> Acces au dashboard du portefeuille (solde, transactions)
-4. **Iris inconnu** -> Ecran d'enregistrement pour creer un nouveau portefeuille
-5. **Envoyer une transaction** -> Signer avec l'iris et/ou le Ledger (multisig)
+1. **Open the extension** IrisWallet in Chrome
+2. **Scan iris** - the extension calls the backend which captures a photo via the Raspberry Pi and performs recognition
+3. **Iris recognized** -> Access the wallet dashboard (balance, transactions)
+4. **Iris unknown** -> Registration screen to create a new wallet
+5. **Send a transaction** -> Sign with iris and/or Ledger (multisig)
 
-### Endpoints API principaux
+### Main API endpoints
 
-| Methode | Route | Description |
+| Method | Route | Description |
 |---|---|---|
-| `POST` | `/api/scan` | Scanner un iris et identifier le portefeuille |
-| `POST` | `/api/register` | Enregistrer un nouvel iris avec un portefeuille |
-| `GET` | `/api/accounts` | Lister tous les comptes enregistres |
-| `GET` | `/stream` | Flux video MJPEG de la camera Pi |
+| `POST` | `/api/scan` | Scan an iris and identify the wallet |
+| `POST` | `/api/register` | Register a new iris with a wallet |
+| `GET` | `/api/accounts` | List all registered accounts |
+| `GET` | `/stream` | MJPEG video stream from Pi camera |
 
-## Stack technique
+## Tech stack
 
-- **Reconnaissance d'iris** : open-iris (Worldcoin), distance de Hamming, seuil 0.35
-- **Backend** : Flask, SQLite, OpenCV
-- **Extension** : React 18, TypeScript, Vite, Viem (Web3)
-- **Blockchain** : Solidity 0.8.28, Foundry, Ethereum Sepolia
-- **Hardware** : Raspberry Pi 4, chiffrement AES-256-GCM
-- **Wallet hardware** : Ledger (WebHID/WebUSB)
+- **Iris recognition**: open-iris (Worldcoin), Hamming distance, threshold 0.35
+- **Backend**: Flask, SQLite, OpenCV
+- **Extension**: React 18, TypeScript, Vite, Viem (Web3)
+- **Blockchain**: Solidity 0.8.28, Foundry, Ethereum Sepolia
+- **Hardware**: Raspberry Pi 4, AES-256-GCM encryption
+- **Hardware wallet**: Ledger (WebHID/WebUSB)
