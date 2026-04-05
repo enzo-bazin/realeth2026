@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet } from '../context/WalletContext';
 import { register } from '../services/api';
 import { createWallet, registerOnChain, getBalance, deployMultisig } from '../services/blockchain';
-import { getLedgerAddress } from '../services/ledger';
-import { isWebHIDAvailable, openInTab } from '../utils/openInTab';
+import { requestLedgerAddress, pollLedgerResult, clearLedgerPending } from '../services/ledger';
 import { formatEther, type Address } from 'viem';
 
 type Step = 'name' | 'multisig-choice' | 'ledger-pair' | 'creating';
+
+const REGISTER_STATE_KEY = 'iriswallet_register_state';
 
 export default function RegisterScreen() {
   const { setWallet, setScreen } = useWallet();
@@ -17,6 +18,35 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
   const [useMultisig, setUseMultisig] = useState(false);
   const [ledgerAddr, setLedgerAddr] = useState('');
+
+  // On mount: if there's a pending register state, poll backend for result
+  useEffect(() => {
+    const saved = localStorage.getItem(REGISTER_STATE_KEY);
+    if (!saved) return;
+
+    const state = JSON.parse(saved);
+    setWalletName(state.walletName || '');
+    setUseMultisig(true);
+    setStep('ledger-pair');
+    setStatus('Waiting for Ledger connection...');
+
+    const interval = setInterval(async () => {
+      const result = await pollLedgerResult();
+      if (result) {
+        clearInterval(interval);
+        if (result.address) {
+          setLedgerAddr(result.address);
+          setStatus('');
+          localStorage.removeItem(REGISTER_STATE_KEY);
+        } else if (result.error) {
+          setError(result.error);
+          setStatus('');
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleNameSubmit = () => {
     if (!walletName.trim()) {
@@ -30,30 +60,21 @@ export default function RegisterScreen() {
   const handleMultisigChoice = (wantMultisig: boolean) => {
     setUseMultisig(wantMultisig);
     if (wantMultisig) {
-      if (!isWebHIDAvailable()) {
-        openInTab();
-        return;
-      }
       setStep('ledger-pair');
     } else {
       handleCreate(false, '');
     }
   };
 
-  const handleConnectLedger = async () => {
-    setLoading(true);
+  const handleConnectLedger = () => {
     setError('');
-    try {
-      const addr = await getLedgerAddress();
-      setLedgerAddr(addr);
-      setLoading(false);
-    } catch (e: any) {
-      setError(e.message || 'Failed to connect Ledger');
-      setLoading(false);
-    }
+    setStatus('Waiting for Ledger connection...');
+    requestLedgerAddress(walletName.trim());
   };
 
   const handleConfirmLedger = () => {
+    localStorage.removeItem(REGISTER_STATE_KEY);
+    clearLedgerPending();
     handleCreate(true, ledgerAddr);
   };
 
@@ -67,36 +88,20 @@ export default function RegisterScreen() {
 
       if (multisig) {
         setStatus('Deploying multisig wallet...');
-        const { contractAddress, txHash: deployTxHash } = await deployMultisig(
-          irisAddress,
-          ledgerAddress as Address,
-        );
+        const { contractAddress } = await deployMultisig(irisAddress, ledgerAddress as Address);
 
         setStatus('Registering iris...');
-        const backendResult = await register(
-          walletName.trim(),
-          contractAddress,
-          privateKey,
-          irisAddress,
-          ledgerAddress,
-        );
+        const backendResult = await register(walletName.trim(), contractAddress, privateKey, irisAddress, ledgerAddress);
         const irisHash = backendResult.wallet?.irisHash || '';
 
         setStatus('Registering on-chain...');
         const txHash = await registerOnChain(contractAddress, irisHash);
-
         const bal = await getBalance(contractAddress);
 
         setWallet({
-          walletName: walletName.trim(),
-          walletAddress: contractAddress,
-          balance: formatEther(bal),
-          createdAt: new Date().toISOString(),
-          onChain: true,
-          txHash,
-          isMultisig: true,
-          irisAddress,
-          ledgerAddress,
+          walletName: walletName.trim(), walletAddress: contractAddress,
+          balance: formatEther(bal), createdAt: new Date().toISOString(),
+          onChain: true, txHash, isMultisig: true, irisAddress, ledgerAddress,
         });
       } else {
         setStatus('Registering iris...');
@@ -105,19 +110,14 @@ export default function RegisterScreen() {
 
         setStatus('Registering on-chain...');
         const txHash = await registerOnChain(irisAddress, irisHash);
-
         const bal = await getBalance(irisAddress);
 
         setWallet({
-          walletName: walletName.trim(),
-          walletAddress: irisAddress,
-          balance: formatEther(bal),
-          createdAt: new Date().toISOString(),
-          onChain: true,
-          txHash,
+          walletName: walletName.trim(), walletAddress: irisAddress,
+          balance: formatEther(bal), createdAt: new Date().toISOString(),
+          onChain: true, txHash,
         });
       }
-
       setScreen('dashboard');
     } catch (e: any) {
       setError(e.message || 'Error creating wallet');
@@ -144,19 +144,11 @@ export default function RegisterScreen() {
         <>
           <div className="form-group">
             <label className="form-label" htmlFor="wallet-name">Wallet name</label>
-            <input
-              id="wallet-name"
-              className="form-input"
-              type="text"
-              placeholder="e.g. MyWallet"
-              value={walletName}
-              onChange={(e) => setWalletName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
-            />
+            <input id="wallet-name" className="form-input" type="text" placeholder="e.g. MyWallet"
+              value={walletName} onChange={(e) => setWalletName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()} />
           </div>
-          <button className="btn-primary" onClick={handleNameSubmit}>
-            Continue
-          </button>
+          <button className="btn-primary" onClick={handleNameSubmit}>Continue</button>
         </>
       )}
 
@@ -164,72 +156,53 @@ export default function RegisterScreen() {
         <>
           <div className="dashboard-card">
             <p className="scan-status">Do you want to add Ledger multisig?</p>
-            <p className="scan-hint">
-              Multisig requires both your iris and a Ledger hardware wallet to sign every transaction (2-of-2 security).
-            </p>
+            <p className="scan-hint">Multisig requires both your iris and a Ledger hardware wallet to sign every transaction (2-of-2 security).</p>
           </div>
-          <button className="btn-primary" onClick={() => handleMultisigChoice(true)}>
-            Yes, use Iris + Ledger
-          </button>
-          <button className="btn-link" onClick={() => handleMultisigChoice(false)}>
-            No, iris only
-          </button>
+          <button className="btn-primary" onClick={() => handleMultisigChoice(true)}>Yes, use Iris + Ledger</button>
+          <button className="btn-link" onClick={() => handleMultisigChoice(false)}>No, iris only</button>
         </>
       )}
 
       {step === 'ledger-pair' && (
         <>
-          {!ledgerAddr ? (
-            <>
-              <div className="dashboard-card">
-                <p className="scan-hint">
-                  Plug in your Ledger, unlock it, and open the Ethereum app.
-                </p>
-              </div>
-              <button className="btn-primary" onClick={handleConnectLedger} disabled={loading}>
-                {loading ? (
-                  <><span className="spinner" /><span className="loading-text">Connecting...</span></>
-                ) : (
-                  'Connect Ledger'
-                )}
-              </button>
-            </>
-          ) : (
+          {ledgerAddr ? (
             <>
               <div className="dashboard-card">
                 <p className="scan-status success">Ledger connected</p>
                 <div className="info-row">
                   <span className="info-label">Address</span>
-                  <span className="info-value mono">
-                    {ledgerAddr.slice(0, 10)}...{ledgerAddr.slice(-4)}
-                  </span>
+                  <span className="info-value mono">{ledgerAddr.slice(0, 10)}...{ledgerAddr.slice(-4)}</span>
                 </div>
               </div>
-              <button className="btn-primary" onClick={handleConfirmLedger}>
-                Create multisig wallet
-              </button>
+              <button className="btn-primary" onClick={handleConfirmLedger}>Create multisig wallet</button>
+            </>
+          ) : (
+            <>
+              <div className="dashboard-card">
+                <p className="scan-hint">Click below to open the Ledger page. Connect your Ledger there, then come back here.</p>
+              </div>
+              {status && (
+                <div className="scan-status">
+                  <span className="scan-status-dot" />
+                  <span>{status}</span>
+                </div>
+              )}
+              <button className="btn-primary" onClick={handleConnectLedger}>Connect Ledger</button>
             </>
           )}
-          <button className="btn-link" onClick={() => { setStep('multisig-choice'); setLedgerAddr(''); }}>
-            ← Back
-          </button>
+          {error && <p className="error-msg">{error}</p>}
+          <button className="btn-link" onClick={() => { setStep('multisig-choice'); setLedgerAddr(''); clearLedgerPending(); localStorage.removeItem(REGISTER_STATE_KEY); }}>← Back</button>
         </>
       )}
 
       {step === 'creating' && (
         <div className="dashboard-card">
-          <span className="spinner" />
-          <span className="loading-text">{status}</span>
+          <span className="spinner" /><span className="loading-text">{status}</span>
         </div>
       )}
 
-      {error && <p className="error-msg">{error}</p>}
-
-      {step === 'name' && (
-        <button className="btn-link" onClick={() => setScreen('scan')}>
-          ← Back to scan
-        </button>
-      )}
+      {error && step !== 'ledger-pair' && <p className="error-msg">{error}</p>}
+      {step === 'name' && <button className="btn-link" onClick={() => setScreen('scan')}>← Back to scan</button>}
     </div>
   );
 }

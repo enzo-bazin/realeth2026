@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useWallet } from '../context/WalletContext';
 import {
   sendTransaction,
@@ -8,11 +8,11 @@ import {
   signMessageWithIrisKey,
   executeMultisig,
 } from '../services/blockchain';
-import { signWithLedger } from '../services/ledger';
-import { isWebHIDAvailable, openInTab } from '../utils/openInTab';
+import { requestLedgerSign, pollLedgerResult, clearLedgerPending } from '../services/ledger';
 import { formatEther, type Address, type Hex } from 'viem';
 
 const API_URL = 'http://localhost:5000';
+const SEND_STATE_KEY = 'iriswallet_send_state';
 
 type Step = 'form' | 'iris-signing' | 'ledger-signing' | 'sending' | 'success';
 
@@ -26,6 +26,54 @@ export default function SendScreen() {
   const [txHash, setTxHash] = useState('');
   const [irisSig, setIrisSig] = useState<Hex | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  // On mount: if there's a pending send state, poll backend for Ledger result
+  useEffect(() => {
+    const saved = localStorage.getItem(SEND_STATE_KEY);
+    if (!saved) return;
+
+    const state = JSON.parse(saved);
+    setTo(state.to);
+    setAmount(state.amount);
+    setIrisSig(state.irisSig as Hex);
+    setStep('ledger-signing');
+    setStatus('Waiting for Ledger signature...');
+
+    const interval = setInterval(async () => {
+      const result = await pollLedgerResult();
+      if (result) {
+        clearInterval(interval);
+        if (result.signature) {
+          setStep('sending');
+          setStatus('Sending multisig transaction...');
+          localStorage.removeItem(SEND_STATE_KEY);
+          clearLedgerPending();
+
+          try {
+            const hash = await executeMultisig(
+              wallet!.walletAddress as Address,
+              state.to as Address,
+              state.amount,
+              state.irisSig as Hex,
+              result.signature as Hex,
+            );
+            setTxHash(hash);
+            setStep('success');
+            const bal = await getBalance(wallet!.walletAddress as Address);
+            setWallet({ ...wallet!, balance: formatEther(bal) });
+          } catch (e: any) {
+            setError(e.message || 'Transaction failed');
+            setStep('form');
+          }
+        } else if (result.error) {
+          setError(result.error);
+          setStatus('');
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   if (!wallet) return null;
 
@@ -68,7 +116,7 @@ export default function SendScreen() {
         }
 
         if (isMultisig) {
-          // Sign with iris key, then go to Ledger step
+          // Sign with iris key, then open Ledger bridge
           setStatus('Iris verified — signing...');
           const value = BigInt(Math.floor(parseFloat(amount) * 1e18));
           const msgHash = await getMultisigDataHash(
@@ -76,14 +124,14 @@ export default function SendScreen() {
             to.trim() as Address,
             value,
           );
-          // signMessage expects the raw dataHash (before EIP-191 prefix)
-          // But getMessageHash returns the already-prefixed hash
-          // We need the dataHash for signMessage which will add the prefix
-          // Actually, let's compute dataHash ourselves
           const sig = await signMessageWithIrisKey(wallet.irisAddress as Address, msgHash);
           setIrisSig(sig);
+
+          // Save state and open Ledger bridge
           setStep('ledger-signing');
           setStatus('');
+          requestLedgerSign(msgHash, { to: to.trim(), amount, irisSig: sig });
+          // Popup may close here when user switches to Ledger tab
         } else {
           // Simple send
           setStep('sending');
@@ -114,42 +162,16 @@ export default function SendScreen() {
     };
   };
 
-  const handleLedgerSign = async () => {
-    if (!isWebHIDAvailable()) {
-      openInTab();
-      return;
-    }
-    setError('');
-    setStatus('Waiting for Ledger confirmation...');
-
-    try {
+  const handleLedgerSign = () => {
+    if (irisSig) {
       const value = BigInt(Math.floor(parseFloat(amount) * 1e18));
-      const msgHash = await getMultisigDataHash(
+      getMultisigDataHash(
         wallet.walletAddress as Address,
         to.trim() as Address,
         value,
-      );
-
-      const ledgerSig = await signWithLedger(msgHash);
-
-      setStep('sending');
-      setStatus('Sending multisig transaction...');
-
-      const hash = await executeMultisig(
-        wallet.walletAddress as Address,
-        to.trim() as Address,
-        amount,
-        irisSig!,
-        ledgerSig,
-      );
-
-      setTxHash(hash);
-      setStep('success');
-      const bal = await getBalance(wallet.walletAddress as Address);
-      setWallet({ ...wallet, balance: formatEther(bal) });
-    } catch (e: any) {
-      setError(e.message || 'Ledger signing failed');
-      setStep('form');
+      ).then(msgHash => {
+        requestLedgerSign(msgHash, { to: to.trim(), amount, irisSig });
+      });
     }
   };
 
@@ -157,6 +179,8 @@ export default function SendScreen() {
     if (eventSourceRef.current) eventSourceRef.current.close();
     fetch(`${API_URL}/api/autoscan/stop`, { method: 'POST' }).catch(() => {});
     setStep('form');
+    clearLedgerPending();
+    localStorage.removeItem(SEND_STATE_KEY);
   };
 
   return (
@@ -186,20 +210,17 @@ export default function SendScreen() {
             </div>
           </div>
           {status ? (
-            <div className="scan-status">
-              <span className="spinner" />
-              <span className="loading-text">{status}</span>
-            </div>
+            <p className="scan-hint">{status}</p>
           ) : (
             <>
-              <p className="scan-hint">Plug in your Ledger, open the Ethereum app, and confirm.</p>
+              <p className="scan-hint">A new tab opened for Ledger signing. Click the button there to confirm.</p>
               <button className="btn-primary" onClick={handleLedgerSign}>
-                Sign with Ledger
+                Retry Ledger
               </button>
             </>
           )}
           {error && <p className="error-msg">{error}</p>}
-          <button className="btn-link" onClick={() => { setStep('form'); setIrisSig(null); }}>Cancel</button>
+          <button className="btn-link" onClick={cancelScan}>Cancel</button>
         </>
       )}
 

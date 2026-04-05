@@ -34,10 +34,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
+      // Check if there's a pending Ledger flow
+      const registerState = localStorage.getItem('iriswallet_register_state');
+      const sendState = localStorage.getItem('iriswallet_send_state');
+
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         setWalletState(JSON.parse(saved));
-        setScreen('dashboard');
+        if (sendState) {
+          setScreen('send');
+        } else {
+          setScreen('dashboard');
+        }
+      } else if (registerState) {
+        setScreen('register');
       }
     } catch { /* ignore */ }
     setLoading(false);
